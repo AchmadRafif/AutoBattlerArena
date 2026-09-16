@@ -1,0 +1,1278 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Auto-Battler Arena - Retaliator Fix & Balanced Stats</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Teko:wght@600&display=swap");
+
+      * {
+        box-sizing: border-box;
+        user-select: none;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #dcd6dd;
+        font-family: "Teko", sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      #game-container {
+        width: 450px;
+        display: none;
+        flex-direction: column;
+        position: relative;
+      }
+
+      #top-ui {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        margin-bottom: 5px;
+        padding: 0 10px;
+      }
+
+      .char-title {
+        font-size: 28px;
+        letter-spacing: 1px;
+        color: #ecf0f1;
+        text-shadow:
+          -2px -2px 0 #000,
+          2px -2px 0 #000,
+          -2px 2px 0 #000,
+          2px 2px 0 #000;
+      }
+
+      #canvas-wrapper {
+        position: relative;
+        width: 450px;
+        height: 450px;
+      }
+
+      canvas {
+        background-color: #ffffff;
+        border: 4px solid #000;
+        border-radius: 4px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      #winner-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.82);
+        display: none;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        color: #fff;
+        border-radius: 4px;
+        z-index: 10;
+      }
+
+      #winner-title {
+        font-size: 42px;
+        color: #f1c40f;
+        text-shadow: 3px 3px 0 #000;
+        margin-bottom: 5px;
+        text-transform: uppercase;
+      }
+
+      #winner-subtitle {
+        font-size: 24px;
+        margin-bottom: 25px;
+        color: #ecf0f1;
+      }
+
+      .restart-btn {
+        background: #27ae60;
+        border: 3px solid #fff;
+        color: white;
+        padding: 8px 24px;
+        font-size: 22px;
+        font-family: "Teko", sans-serif;
+        cursor: pointer;
+        border-radius: 6px;
+        transition:
+          transform 0.1s,
+          background 0.2s;
+      }
+
+      .restart-btn:hover {
+        background: #2ecc71;
+        transform: scale(1.08);
+      }
+
+      #bottom-ui {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 10px;
+        padding: 0 5px;
+      }
+
+      .stats-box {
+        width: 48%;
+      }
+
+      .ability-bar-container {
+        width: 100%;
+        height: 22px;
+        background-color: #333;
+        border: 2px solid #000;
+        position: relative;
+        margin-bottom: 5px;
+      }
+
+      .ability-fill {
+        height: 100%;
+        width: 0%;
+        transition: width 0.05s linear;
+      }
+
+      .ability-text {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: white;
+        font-size: 14px;
+        font-family: "Arial", sans-serif;
+        font-weight: bold;
+        text-shadow: 1px 1px 2px #000;
+        white-space: nowrap;
+        text-transform: uppercase;
+      }
+
+      .stats-text {
+        font-size: 20px;
+        color: #000;
+        line-height: 1.1;
+      }
+
+      #selection-screen {
+        background: rgba(0, 0, 0, 0.92);
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        z-index: 100;
+      }
+
+      .char-btn {
+        background: #2c3e50;
+        border: 2px solid #ecf0f1;
+        color: white;
+        padding: 8px 18px;
+        margin: 4px;
+        font-size: 20px;
+        font-family: "Teko", sans-serif;
+        cursor: pointer;
+        width: 340px;
+        border-radius: 6px;
+        transition: 0.15s;
+        text-align: left;
+      }
+
+      .char-btn:hover {
+        background: #e74c3c;
+        transform: scale(1.03);
+      }
+      #selection-title {
+        font-size: 32px;
+        margin-bottom: 15px;
+        text-shadow: 2px 2px 0 #000;
+        color: #f1c40f;
+      }
+      .char-desc {
+        font-size: 13px;
+        font-family: Arial, sans-serif;
+        color: #bdc3c7;
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="selection-screen">
+      <div id="selection-title">Pilih Petarung 1 (KIRI)</div>
+      <div id="roster"></div>
+    </div>
+
+    <div id="game-container">
+      <div id="top-ui">
+        <div id="name1" class="char-title">P1</div>
+        <div id="name2" class="char-title">P2</div>
+      </div>
+
+      <div id="canvas-wrapper">
+        <canvas id="gameCanvas" width="450" height="450"></canvas>
+
+        <div id="winner-overlay">
+          <div id="winner-title">VICTORY!</div>
+          <div id="winner-subtitle">VALKYRIE WINS</div>
+          <button class="restart-btn" onclick="resetToMenu()">
+            PILIH KARAKTER LAGI
+          </button>
+        </div>
+      </div>
+
+      <div id="bottom-ui">
+        <div class="stats-box">
+          <div class="ability-bar-container">
+            <div id="barFill1" class="ability-fill"></div>
+            <div id="ultName1" class="ability-text">ULT 1</div>
+          </div>
+          <div class="stats-text" id="stats1">Stats</div>
+        </div>
+        <div class="stats-box" style="text-align: right">
+          <div class="ability-bar-container">
+            <div id="barFill2" class="ability-fill" style="float: right"></div>
+            <div id="ultName2" class="ability-text">ULT 2</div>
+          </div>
+          <div class="stats-text" id="stats2">Stats</div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const canvas = document.getElementById("gameCanvas");
+      const ctx = canvas.getContext("2d");
+
+      const characterDB = {
+        Valkyrie: {
+          color: "#a4c8e1",
+          hp: 100,
+          damage: 1.5,
+          speed: 2.2,
+          weapons: 1,
+          wLen: 65,
+          wWidth: 12,
+          rotSpeed: 0.015,
+          ultName: "VALHALLA",
+          ultColor: "#a4c8e1",
+          desc: "1 Pedang panjang. Regen HP saat Ultimate.",
+          ultMax: 300,
+        },
+        Vessel: {
+          color: "#c0392b",
+          hp: 100,
+          damage: 2.0,
+          speed: 2.4,
+          weapons: 1,
+          wLen: 48,
+          wWidth: 16,
+          rotSpeed: 0.02,
+          ultName: "DETERMINATION",
+          ultColor: "#c0392b",
+          desc: "1 Dagger cepat. Lifesteal saat Ultimate.",
+          ultMax: 300,
+        },
+        Juggernaut: {
+          color: "#7f8c8d",
+          hp: 450,
+          damage: 2.5,
+          speed: 1.4,
+          weapons: 2,
+          wLen: 60,
+          wWidth: 18,
+          rotSpeed: 0.01,
+          ultName: "TITAN FORM",
+          ultColor: "#7f8c8d",
+          desc: "2 Gada besar lambat. Kebal & Raksasa saat Ultimate.",
+          ultMax: 400,
+        },
+        "Monkey King": {
+          color: "#f1c40f",
+          hp: 100,
+          damage: 1.5,
+          speed: 2.6,
+          weapons: 2,
+          wLen: 70,
+          wWidth: 8,
+          rotSpeed: 0.016,
+          ultName: "TRICKSTER CLONE",
+          ultColor: "#f1c40f",
+          desc: "Tongkat ganda. Memanggil 2 Clone pembantu.",
+          ultMax: 350,
+        },
+        Brawler: {
+          color: "#2ecc71",
+          hp: 100,
+          damage: 2.0,
+          speed: 3.0,
+          weapons: 0,
+          wLen: 0,
+          wWidth: 0,
+          rotSpeed: 0,
+          ultName: "METEOR DASH",
+          ultColor: "#2ecc71",
+          desc: "TIDAK ADA SENJATA. Menabrakkan badan untuk damage!",
+          ultMax: 400,
+        },
+        "Sword Saint": {
+          color: "#34495e",
+          hp: 100,
+          damage: 1.5,
+          speed: 2.8,
+          weapons: 1,
+          wLen: 75,
+          wWidth: 8,
+          rotSpeed: 0.04,
+          ultName: "SPATIAL REND",
+          ultColor: "#ffffff",
+          desc: "Ult: Time stop map-wide slash!",
+          ultMax: 900,
+        },
+        Retaliator: {
+          color: "#4a6572",
+          hp: 100,
+          damage: 2.0,
+          speed: 2.1,
+          weapons: 1,
+          wLen: 70,
+          wWidth: 10,
+          rotSpeed: 0,
+          ultName: "RETRIBUTION ZONE",
+          ultColor: "#00d2d3",
+          desc: "Pasif: Reduce 50% damage masuk & counter attack saat musuh di jangkauan.",
+          ultMax: 1500,
+        },
+        Stasis: {
+          color: "#8e44ad",
+          hp: 100,
+          damage: 2.2,
+          speed: 2.1,
+          weapons: 0,
+          wLen: 0,
+          wWidth: 0,
+          rotSpeed: 0,
+          ultName: "TIME STOP BARRAGE",
+          ultColor: "#00d2d3",
+          desc: "Marksman Pisau (Hit +0.01 Spd & -1s CD). Ult: Time Stop + 3x Atk Speed!",
+          ultMax: 1500,
+        },
+      };
+
+      let balls = [];
+      let projectiles = [];
+      let gameState = "menu";
+      let p1Choice = null;
+      let p2Choice = null;
+      let effects = [];
+
+      class Projectile {
+        constructor(x, y, targetX, targetY, owner, isTimeStopCreated = false) {
+          this.x = x;
+          this.y = y;
+          this.owner = owner;
+          this.pierce = true;
+          this.delayTimer = 22;
+          this.speed = 6.5;
+          this.damage = owner.damage;
+          this.hitTargets = new Set();
+          this.life = 350;
+          this.frozenInTime = isTimeStopCreated;
+
+          let dx = targetX - x;
+          let dy = targetY - y;
+          this.angle = Math.atan2(dy, dx);
+          this.vx = Math.cos(this.angle) * this.speed;
+          this.vy = Math.sin(this.angle) * this.speed;
+        }
+
+        update() {
+          if (this.frozenInTime) return;
+
+          if (this.delayTimer > 0) {
+            this.delayTimer--;
+            return;
+          }
+
+          this.x += this.vx;
+          this.y += this.vy;
+          this.life--;
+
+          balls.forEach((target) => {
+            if (
+              target !== this.owner &&
+              target.team !== this.owner.team &&
+              target.hp > 0
+            ) {
+              if (!this.hitTargets.has(target)) {
+                let dist = Math.hypot(target.x - this.x, target.y - this.y);
+                if (dist < target.radius + 10) {
+                  let finalDmg = target.takeDamage(this.damage);
+                  target.iFrames = 12;
+                  this.hitTargets.add(target);
+
+                  if (this.owner && this.owner.name === "Stasis") {
+                    this.owner.atkSpeed += 0.01;
+                    this.owner.ultCharge = Math.min(
+                      this.owner.ultMax,
+                      this.owner.ultCharge + 60,
+                    );
+                    spawnText(
+                      "+0.01 Spd | -1s CD",
+                      this.owner.x,
+                      this.owner.y - 28,
+                      "#00d2d3",
+                    );
+                  }
+
+                  if (target.name === "Retaliator") {
+                    target.triggerRetaliation(this.owner);
+                  }
+
+                  spawnText(
+                    "-" + finalDmg.toFixed(1),
+                    target.x,
+                    target.y - 12,
+                    "#00d2d3",
+                  );
+
+                  effects.push({
+                    type: "slash",
+                    x: this.x,
+                    y: this.y,
+                    life: 10,
+                    angle: this.angle,
+                  });
+
+                  if (!this.pierce) {
+                    this.life = 0;
+                  }
+                }
+              }
+            }
+          });
+        }
+
+        draw() {
+          ctx.save();
+          ctx.translate(this.x, this.y);
+          ctx.rotate(this.angle);
+
+          ctx.shadowColor = "#00d2d3";
+          ctx.shadowBlur = this.frozenInTime || this.delayTimer > 0 ? 12 : 5;
+
+          ctx.fillStyle = "#3d2b56";
+          ctx.fillRect(-12, -3, 9, 6);
+
+          ctx.fillStyle = "#ffffff";
+          ctx.beginPath();
+          ctx.moveTo(-3, -5);
+          ctx.lineTo(14, 0);
+          ctx.lineTo(-3, 5);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.strokeStyle = "#00d2d3";
+          ctx.lineWidth = 1.8;
+          ctx.stroke();
+
+          ctx.restore();
+        }
+      }
+
+      class Ball {
+        constructor(team, name, x, y, isClone = false) {
+          let stats = characterDB[name];
+          this.team = team;
+          this.name = name;
+          this.isClone = isClone;
+          this.x = x;
+          this.y = y;
+          this.baseRadius = isClone ? 15 : 25;
+          this.radius = this.baseRadius;
+          this.color = stats.color;
+          this.maxHp = isClone ? 80 : stats.hp;
+          this.hp = this.maxHp;
+          this.baseSpeed = stats.speed;
+          this.vx = 0;
+          this.vy = 0;
+
+          this.weapons = stats.weapons;
+          this.baseWLen = isClone ? stats.wLen * 0.6 : stats.wLen;
+          this.wLen = this.baseWLen;
+          this.wWidth = isClone ? stats.wWidth * 0.6 : stats.wWidth;
+          this.angle = Math.random() * Math.PI;
+          this.baseRotSpeed = stats.rotSpeed;
+          this.rotSpeed = stats.rotSpeed;
+          this.damage = stats.damage;
+
+          this.ultCharge = 0;
+          this.ultMax = stats.ultMax || 400;
+          this.isUltActive = false;
+          this.bonusText = "";
+
+          this.parryCooldown = 0;
+          this.iFrames = 0;
+
+          this.visible = true;
+          this.timeStopTimer = 0;
+
+          this.swingTimer = 0;
+          this.zoneRadius = 140;
+          this.attackCooldown = 0;
+
+          this.atkSpeed = 1.0;
+          this.shootCooldown = 0;
+          this.stasisUltTimer = 0;
+        }
+
+        takeDamage(amount) {
+          let actualDamage = amount;
+          if (this.name === "Retaliator") {
+            actualDamage *= 0.5;
+          }
+          this.hp -= actualDamage;
+          return actualDamage;
+        }
+
+        getWeaponSegments() {
+          let segs = [];
+          if (this.weapons === 0) return segs;
+          for (let i = 0; i < this.weapons; i++) {
+            let ang =
+              this.angle +
+              (this.name === "Monkey King"
+                ? Math.PI
+                : (Math.PI * 2) / this.weapons) *
+                i;
+            let startX = this.x + Math.cos(ang) * this.radius;
+            let startY = this.y + Math.sin(ang) * this.radius;
+            let endX = this.x + Math.cos(ang) * (this.radius + this.wLen);
+            let endY = this.y + Math.sin(ang) * (this.radius + this.wLen);
+            segs.push({
+              p1: { x: startX, y: startY },
+              p2: { x: endX, y: endY },
+            });
+          }
+          return segs;
+        }
+
+        triggerRetaliation(target) {
+          if (this.name !== "Retaliator") return;
+
+          this.swingTimer = 18;
+          this.rotSpeed = 0.45;
+
+          if (!this.isUltActive) {
+            this.ultCharge = Math.min(this.ultMax, this.ultCharge + 60);
+          }
+
+          if (target && target.hp > 0) {
+            let dist = Math.hypot(target.x - this.x, target.y - this.y);
+            let reach = this.radius + this.wLen + target.radius;
+
+            if (dist <= reach && (target.iFrames === 0 || this.isUltActive)) {
+              let finalDmg = target.takeDamage(this.damage);
+              target.iFrames = 25;
+              spawnText(
+                "-" + finalDmg.toFixed(1),
+                target.x,
+                target.y - 12,
+                "#00d2d3",
+              );
+
+              effects.push({
+                type: "slash",
+                x: (this.x + target.x) / 2,
+                y: (this.y + target.y) / 2,
+                life: 15,
+                angle: Math.atan2(target.y - this.y, target.x - this.x),
+              });
+            }
+          }
+
+          this.damage = Math.max(2.0, this.damage - 0.8);
+        }
+
+        draw() {
+          if (!this.visible) return;
+
+          if (this.name === "Retaliator" && this.isUltActive) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.zoneRadius, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(0, 210, 211, 0.12)";
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = "rgba(0, 210, 211, 0.6)";
+            ctx.setLineDash([8, 6]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+
+          let segs = this.getWeaponSegments();
+          segs.forEach((seg) => {
+            ctx.beginPath();
+            ctx.moveTo(seg.p1.x, seg.p1.y);
+            ctx.lineTo(seg.p2.x, seg.p2.y);
+            ctx.lineWidth = this.wWidth;
+            ctx.strokeStyle = this.isUltActive ? "#f1c40f" : "#444";
+            if (this.name === "Vessel") ctx.strokeStyle = "#8b0000";
+            if (this.name === "Valkyrie") ctx.strokeStyle = "#87ceeb";
+            if (this.name === "Retaliator") ctx.strokeStyle = "#00d2d3";
+            ctx.lineCap = "round";
+            ctx.stroke();
+          });
+
+          if (this.iFrames > 0 && Math.floor(this.iFrames / 3) % 2 === 0) {
+            ctx.fillStyle = "#ffaaaa";
+          } else {
+            ctx.fillStyle = "#ffffff";
+          }
+
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.lineWidth = 4;
+          ctx.strokeStyle = this.color;
+          ctx.stroke();
+
+          ctx.fillStyle = "#000";
+          ctx.font = `bold ${this.isClone ? 12 : 20}px Arial`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(Math.floor(this.hp), this.x, this.y);
+        }
+
+        update() {
+          if (this.name === "Stasis") {
+            this.shootCooldown--;
+            if (this.shootCooldown <= 0) {
+              let enemy = balls.find((b) => b.team !== this.team && b.hp > 0);
+              if (enemy) {
+                projectiles.push(
+                  new Projectile(
+                    this.x,
+                    this.y,
+                    enemy.x,
+                    enemy.y,
+                    this,
+                    this.isUltActive,
+                  ),
+                );
+
+                let effectiveAtkSpeed = this.isUltActive
+                  ? this.atkSpeed * 3
+                  : this.atkSpeed;
+                this.shootCooldown = Math.max(4, 60 / effectiveAtkSpeed);
+              }
+            }
+          }
+
+          if (this.name === "Retaliator") {
+            this.damage += 0.1 / 60;
+            if (this.attackCooldown > 0) this.attackCooldown--;
+
+            if (this.swingTimer > 0) {
+              this.swingTimer--;
+            } else {
+              this.rotSpeed = 0;
+            }
+
+            if (this.isUltActive) {
+              this.vx = 0;
+              this.vy = 0;
+
+              if (this.attackCooldown <= 0) {
+                balls.forEach((target) => {
+                  if (
+                    target !== this &&
+                    target.team !== this.team &&
+                    target.hp > 0
+                  ) {
+                    let dist = Math.hypot(target.x - this.x, target.y - this.y);
+                    if (dist <= this.zoneRadius + target.radius) {
+                      this.triggerRetaliation(target);
+                      this.attackCooldown = 20;
+                    }
+                  }
+                });
+              }
+            }
+          }
+
+          this.x += this.vx;
+          this.y += this.vy;
+          this.angle += this.rotSpeed;
+
+          if (this.parryCooldown > 0) this.parryCooldown--;
+          if (this.iFrames > 0) this.iFrames--;
+
+          let currentSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+          let targetSpeed =
+            this.isUltActive && this.name === "Brawler"
+              ? this.baseSpeed * 1.8
+              : this.baseSpeed;
+
+          if (currentSpeed > targetSpeed) {
+            this.vx *= 0.92;
+            this.vy *= 0.92;
+          } else if (currentSpeed < targetSpeed && currentSpeed > 0.1) {
+            let ratio = targetSpeed / currentSpeed;
+            this.vx *= ratio;
+            this.vy *= ratio;
+          }
+
+          if (this.x - this.radius <= 0) {
+            this.x = this.radius;
+            this.vx *= -1;
+          }
+          if (this.x + this.radius >= canvas.width) {
+            this.x = canvas.width - this.radius;
+            this.vx *= -1;
+          }
+          if (this.y - this.radius <= 0) {
+            this.y = this.radius;
+            this.vy *= -1;
+          }
+          if (this.y + this.radius >= canvas.height) {
+            this.y = canvas.height - this.radius;
+            this.vy *= -1;
+          }
+
+          if (gameState === "playing" && !this.isClone && !this.isUltActive) {
+            this.ultCharge++;
+            if (this.ultCharge >= this.ultMax) this.activateUlt();
+          }
+
+          if (this.isUltActive && this.name === "Valkyrie") {
+            this.hp = Math.min(this.maxHp, this.hp + 0.4);
+          }
+        }
+
+        activateUlt() {
+          this.isUltActive = true;
+          if (this.name === "Juggernaut") {
+            this.radius *= 1.4;
+            this.wLen *= 1.4;
+            this.bonusText = "TITAN MODE!";
+          } else if (this.name === "Brawler") {
+            this.bonusText = "METEOR DASH!";
+          } else if (this.name === "Retaliator") {
+            this.bonusText = "RETRIBUTION ZONE!";
+            this.wLen = this.zoneRadius;
+          } else if (this.name === "Monkey King") {
+            this.bonusText = "CLONES OUT!";
+            for (let i = 0; i < 2; i++) {
+              let clone = new Ball(
+                this.team,
+                this.name,
+                this.x + (i === 0 ? 35 : -35),
+                this.y,
+                true,
+              );
+              let ang = Math.random() * Math.PI * 2;
+              clone.vx = Math.cos(ang) * clone.baseSpeed;
+              clone.vy = Math.sin(ang) * clone.baseSpeed;
+              balls.push(clone);
+            }
+          } else if (this.name === "Sword Saint") {
+            this.bonusText = "SPATIAL REND!";
+            gameState = "timestop";
+            this.visible = false;
+            this.timeStopTimer = 180;
+          } else if (this.name === "Stasis") {
+            this.bonusText = "3X ATK SPEED TIME STOP!";
+            this.stasisUltTimer = 210;
+          } else if (this.name === "Vessel") this.bonusText = "LIFESTEAL!";
+          else if (this.name === "Valkyrie") this.bonusText = "REGEN!";
+
+          if (this.name !== "Sword Saint" && this.name !== "Stasis") {
+            setTimeout(() => {
+              this.isUltActive = false;
+              this.ultCharge = 0;
+              this.bonusText = "";
+              this.radius = this.baseRadius;
+              this.wLen = this.baseWLen;
+
+              if (this.name === "Retaliator") {
+                let ang = Math.random() * Math.PI * 2;
+                this.vx = Math.cos(ang) * this.baseSpeed;
+                this.vy = Math.sin(ang) * this.baseSpeed;
+              }
+            }, 5000);
+          }
+        }
+      }
+
+      function spawnText(text, x, y, color) {
+        effects.push({ text: text, x: x, y: y, life: 30, color: color });
+      }
+
+      function checkPhysicsAndHits() {
+        for (let i = 0; i < balls.length; i++) {
+          let A = balls[i];
+          for (let j = i + 1; j < balls.length; j++) {
+            let B = balls[j];
+
+            let dx = B.x - A.x;
+            let dy = B.y - A.y;
+            let dist = Math.sqrt(dx * dx + dy * dy);
+            let isEnemy = A.team !== B.team;
+
+            let aCanParry = !(A.name === "Retaliator" && A.isUltActive);
+            let bCanParry = !(B.name === "Retaliator" && B.isUltActive);
+
+            if (
+              isEnemy &&
+              A.weapons > 0 &&
+              B.weapons > 0 &&
+              A.parryCooldown === 0 &&
+              B.parryCooldown === 0 &&
+              aCanParry &&
+              bCanParry
+            ) {
+              let parryHit = false;
+              for (let sa of A.getWeaponSegments()) {
+                for (let sb of B.getWeaponSegments()) {
+                  if (intersect(sa.p1, sa.p2, sb.p1, sb.p2)) {
+                    parryHit = true;
+                    break;
+                  }
+                }
+                if (parryHit) break;
+              }
+
+              if (parryHit) {
+                A.rotSpeed *= -1;
+                B.rotSpeed *= -1;
+
+                let nx = dx / (dist || 1);
+                let ny = dy / (dist || 1);
+                let pushSpeed = 5;
+                A.vx = -nx * pushSpeed;
+                A.vy = -ny * pushSpeed;
+                B.vx = nx * pushSpeed;
+                B.vy = ny * pushSpeed;
+
+                A.parryCooldown = 18;
+                B.parryCooldown = 18;
+                spawnText(
+                  "PARRY!",
+                  (A.x + B.x) / 2,
+                  (A.y + B.y) / 2,
+                  "#f1c40f",
+                );
+                continue;
+              }
+            }
+
+            if (isEnemy) {
+              if (A.weapons > 0 && B.iFrames === 0 && A.name !== "Retaliator") {
+                for (let sa of A.getWeaponSegments()) {
+                  let cp = getClosestPointOnSegment(
+                    { x: B.x, y: B.y },
+                    sa.p1,
+                    sa.p2,
+                  );
+                  let cDx = B.x - cp.x;
+                  let cDy = B.y - cp.y;
+                  let cDist = Math.sqrt(cDx * cDx + cDy * cDy);
+
+                  if (cDist < B.radius) {
+                    let overlap = B.radius - cDist;
+                    let nx = cDist > 0 ? cDx / cDist : 1;
+                    let ny = cDist > 0 ? cDy / cDist : 0;
+                    B.x += nx * overlap;
+                    B.y += ny * overlap;
+
+                    B.vx *= -1;
+                    B.vy *= -1;
+                    A.rotSpeed *= -1;
+
+                    let dmg =
+                      A.name === "Vessel" && A.isUltActive
+                        ? A.damage * 2
+                        : A.damage;
+                    let finalDmg = B.takeDamage(dmg);
+                    B.iFrames = 60;
+                    spawnText(
+                      "-" + finalDmg.toFixed(1),
+                      B.x,
+                      B.y - 12,
+                      "#e74c3c",
+                    );
+
+                    if (B.name === "Retaliator") B.triggerRetaliation(A);
+                    break;
+                  }
+                }
+              }
+
+              if (B.weapons > 0 && A.iFrames === 0 && B.name !== "Retaliator") {
+                for (let sb of B.getWeaponSegments()) {
+                  let cp = getClosestPointOnSegment(
+                    { x: A.x, y: A.y },
+                    sb.p1,
+                    sb.p2,
+                  );
+                  let cDx = A.x - cp.x;
+                  let cDy = A.y - cp.y;
+                  let cDist = Math.sqrt(cDx * cDx + cDy * cDy);
+
+                  if (cDist < A.radius) {
+                    let overlap = A.radius - cDist;
+                    let nx = cDist > 0 ? cDx / cDist : 1;
+                    let ny = cDist > 0 ? cDy / cDist : 0;
+                    A.x += nx * overlap;
+                    A.y += ny * overlap;
+
+                    A.vx *= -1;
+                    A.vy *= -1;
+                    B.rotSpeed *= -1;
+
+                    let dmg =
+                      B.name === "Vessel" && B.isUltActive
+                        ? B.damage * 2
+                        : B.damage;
+                    let finalDmg = A.takeDamage(dmg);
+                    A.iFrames = 60;
+                    spawnText(
+                      "-" + finalDmg.toFixed(1),
+                      A.x,
+                      A.y - 12,
+                      "#e74c3c",
+                    );
+
+                    if (A.name === "Retaliator") A.triggerRetaliation(B);
+                    break;
+                  }
+                }
+              }
+            }
+
+            if (dist < A.radius + B.radius) {
+              let overlap = (A.radius + B.radius - dist) / 2;
+              let nx = dx / (dist || 1);
+              let ny = dy / (dist || 1);
+              A.x -= nx * overlap;
+              A.y -= ny * overlap;
+              B.x += nx * overlap;
+              B.y += ny * overlap;
+
+              let tempVx = A.vx,
+                tempVy = A.vy;
+              A.vx = B.vx;
+              A.vy = B.vy;
+              B.vx = tempVx;
+              B.vy = tempVy;
+
+              if (isEnemy) {
+                if (
+                  A.weapons === 0 &&
+                  B.iFrames === 0 &&
+                  A.name === "Brawler"
+                ) {
+                  let finalDmg = B.takeDamage(A.damage);
+                  B.iFrames = 30;
+                  spawnText(
+                    "-" + finalDmg.toFixed(1),
+                    B.x,
+                    B.y - 12,
+                    "#e74c3c",
+                  );
+                  A.damage += 1.0;
+                  if (B.name === "Retaliator") B.triggerRetaliation(A);
+                }
+                if (
+                  B.weapons === 0 &&
+                  A.iFrames === 0 &&
+                  B.name === "Brawler"
+                ) {
+                  let finalDmg = A.takeDamage(B.damage);
+                  A.iFrames = 30;
+                  spawnText(
+                    "-" + finalDmg.toFixed(1),
+                    A.x,
+                    A.y - 12,
+                    "#e74c3c",
+                  );
+                  B.damage += 1.0;
+                  if (A.name === "Retaliator") A.triggerRetaliation(B);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      function ccw(A, B, C) {
+        return (C.y - A.y) * (B.x - A.x) > (B.y - A.y) * (C.x - A.x);
+      }
+      function intersect(p1, q1, p2, q2) {
+        return (
+          ccw(p1, p2, q2) !== ccw(q1, p2, q2) &&
+          ccw(p1, q1, p2) !== ccw(p1, q1, q2)
+        );
+      }
+      function dist2(v, w) {
+        return (v.x - w.x) ** 2 + (v.y - w.y) ** 2;
+      }
+      function getClosestPointOnSegment(p, v, w) {
+        let l2 = dist2(v, w);
+        if (l2 === 0) return { x: v.x, y: v.y };
+        let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
+        t = Math.max(0, Math.min(1, t));
+        return { x: v.x + t * (w.x - v.x), y: v.y + t * (w.y - v.y) };
+      }
+
+      function updateUI() {
+        let p1 = balls.find((b) => b.team === 1 && !b.isClone);
+        let p2 = balls.find((b) => b.team === 2 && !b.isClone);
+
+        if (p1) {
+          document.getElementById("barFill1").style.width =
+            (p1.ultCharge / p1.ultMax) * 100 + "%";
+
+          let displaySpd =
+            p1.name === "Stasis"
+              ? (p1.isUltActive ? p1.atkSpeed * 3 : p1.atkSpeed).toFixed(2)
+              : 0;
+
+          document.getElementById("stats1").innerHTML =
+            `Dmg: ${p1.damage.toFixed(1)} ${p1.name === "Stasis" ? `| Spd: ${displaySpd}` : ""} <br>` +
+            (p1.bonusText
+              ? `<span style="color:#00d2d3; font-weight:bold">${p1.bonusText}</span>`
+              : `HP: ${Math.max(0, Math.floor(p1.hp))}/${p1.maxHp}`);
+        }
+        if (p2) {
+          document.getElementById("barFill2").style.width =
+            (p2.ultCharge / p2.ultMax) * 100 + "%";
+
+          let displaySpd =
+            p2.name === "Stasis"
+              ? (p2.isUltActive ? p2.atkSpeed * 3 : p2.atkSpeed).toFixed(2)
+              : 0;
+
+          document.getElementById("stats2").innerHTML =
+            `Dmg: ${p2.damage.toFixed(1)} ${p2.name === "Stasis" ? `| Spd: ${displaySpd}` : ""} <br>` +
+            (p2.bonusText
+              ? `<span style="color:#00d2d3; font-weight:bold">${p2.bonusText}</span>`
+              : `HP: ${Math.max(0, Math.floor(p2.hp))}/${p2.maxHp}`);
+        }
+      }
+
+      function gameLoop() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        let stasisCaster = balls.find(
+          (b) => b.name === "Stasis" && b.isUltActive,
+        );
+
+        if (stasisCaster && gameState === "playing") {
+          ctx.fillStyle = "rgba(10, 15, 30, 0.45)";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          stasisCaster.stasisUltTimer--;
+          stasisCaster.update();
+
+          if (stasisCaster.stasisUltTimer <= 0) {
+            stasisCaster.isUltActive = false;
+            stasisCaster.ultCharge = 0;
+            stasisCaster.bonusText = "";
+
+            projectiles.forEach((p) => {
+              if (p.owner === stasisCaster) {
+                p.frozenInTime = false;
+              }
+            });
+          }
+        } else if (gameState === "timestop") {
+          ctx.fillStyle = "rgba(40, 40, 45, 0.8)";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          let caster = balls.find(
+            (b) => b.name === "Sword Saint" && b.isUltActive,
+          );
+          if (caster) {
+            caster.timeStopTimer--;
+            if (caster.timeStopTimer % 10 === 0) {
+              effects.push({
+                type: "map_slash",
+                p1: { x: -50, y: Math.random() * canvas.height },
+                p2: { x: canvas.width + 50, y: Math.random() * canvas.height },
+                life: 20,
+              });
+
+              balls.forEach((b) => {
+                if (b.team !== caster.team && b.hp > 0) {
+                  let finalDmg = b.takeDamage(2);
+                  spawnText(
+                    "-" + finalDmg.toFixed(1),
+                    b.x,
+                    b.y + (Math.random() * 30 - 15),
+                    "#ffffff",
+                  );
+                }
+              });
+            }
+
+            if (caster.timeStopTimer <= 0) {
+              caster.visible = true;
+              caster.isUltActive = false;
+              caster.ultCharge = 0;
+              caster.bonusText = "";
+              gameState = "playing";
+            }
+          }
+        } else if (gameState === "playing") {
+          balls.forEach((b) => b.update());
+          checkPhysicsAndHits();
+        }
+
+        for (let i = projectiles.length - 1; i >= 0; i--) {
+          let p = projectiles[i];
+          if (
+            gameState === "playing" ||
+            (stasisCaster && p.owner === stasisCaster)
+          ) {
+            p.update();
+          }
+          p.draw();
+          if (p.life <= 0) projectiles.splice(i, 1);
+        }
+
+        for (let i = balls.length - 1; i >= 0; i--) {
+          if (balls[i].hp <= 0) {
+            balls.splice(i, 1);
+          } else {
+            balls[i].draw();
+          }
+        }
+
+        for (let i = effects.length - 1; i >= 0; i--) {
+          let ef = effects[i];
+          if (ef.type === "map_slash") {
+            ctx.beginPath();
+            ctx.moveTo(ef.p1.x, ef.p1.y);
+            ctx.lineTo(ef.p2.x, ef.p2.y);
+            ctx.strokeStyle = `rgba(255, 255, 255, ${ef.life / 20})`;
+            ctx.lineWidth = 6;
+            ctx.stroke();
+          } else if (ef.type === "slash") {
+            ctx.beginPath();
+            ctx.arc(ef.x, ef.y, 25, ef.angle - 0.8, ef.angle + 0.8);
+            ctx.strokeStyle = `rgba(0, 210, 211, ${ef.life / 10})`;
+            ctx.lineWidth = 4;
+            ctx.stroke();
+          } else {
+            ctx.fillStyle = ef.color;
+            ctx.font = "bold 18px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText(ef.text, ef.x, ef.y - (30 - ef.life));
+          }
+
+          ef.life--;
+          if (ef.life <= 0) effects.splice(i, 1);
+        }
+
+        updateUI();
+
+        if (gameState === "playing") {
+          let team1Alive = balls.some((b) => b.team === 1);
+          let team2Alive = balls.some((b) => b.team === 2);
+
+          if (!team1Alive || !team2Alive) {
+            gameState = "over";
+            let winner = team1Alive ? p1Choice : p2Choice;
+            showWinnerOverlay(winner);
+          }
+        }
+
+        requestAnimationFrame(gameLoop);
+      }
+
+      function showWinnerOverlay(winnerName) {
+        document.getElementById("winner-subtitle").innerText =
+          winnerName.toUpperCase() + " WINS!";
+        document.getElementById("winner-overlay").style.display = "flex";
+      }
+
+      function resetToMenu() {
+        document.getElementById("winner-overlay").style.display = "none";
+        document.getElementById("game-container").style.display = "none";
+        document.getElementById("selection-screen").style.display = "flex";
+        document.getElementById("selection-title").innerText =
+          "Pilih Petarung 1 (KIRI)";
+        p1Choice = null;
+        p2Choice = null;
+        projectiles = [];
+        gameState = "menu";
+      }
+
+      const rosterDiv = document.getElementById("roster");
+      Object.keys(characterDB).forEach((char) => {
+        let btn = document.createElement("button");
+        btn.className = "char-btn";
+        btn.innerHTML = `<strong>${char}</strong><span class="char-desc">${characterDB[char].desc}</span>`;
+        btn.onclick = () => {
+          if (!p1Choice) {
+            p1Choice = char;
+            document.getElementById("selection-title").innerText =
+              "Pilih Petarung 2 (KANAN)";
+          } else if (!p2Choice) {
+            p2Choice = char;
+            document.getElementById("selection-screen").style.display = "none";
+            document.getElementById("game-container").style.display = "flex";
+            setupGame();
+          }
+        };
+        rosterDiv.appendChild(btn);
+      });
+
+      function setupGame() {
+        ["1", "2"].forEach((id) => {
+          let choice = id === "1" ? p1Choice : p2Choice;
+          document.getElementById("name" + id).innerText = choice;
+          document.getElementById("name" + id).style.color =
+            characterDB[choice].color;
+          document.getElementById("barFill" + id).style.backgroundColor =
+            characterDB[choice].ultColor;
+          document.getElementById("ultName" + id).innerText =
+            characterDB[choice].ultName;
+        });
+
+        balls = [];
+        projectiles = [];
+        balls.push(
+          new Ball(1, p1Choice, canvas.width * 0.25, canvas.height / 2),
+        );
+        balls.push(
+          new Ball(2, p2Choice, canvas.width * 0.75, canvas.height / 2),
+        );
+
+        gameState = "countdown";
+        gameLoop();
+
+        setTimeout(() => {
+          gameState = "playing";
+          balls.forEach((b) => {
+            let ang = Math.random() * Math.PI * 2;
+            b.vx = Math.cos(ang) * b.baseSpeed;
+            b.vy = Math.sin(ang) * b.baseSpeed;
+          });
+        }, 3000);
+      }
+    </script>
+  </body>
+</html>
