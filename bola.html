@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Auto-Battler Arena - Illustrade Update</title>
+    <title>Auto-Battler Arena - Retaliator Fixed</title>
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Teko:wght@600&display=swap");
 
@@ -195,12 +195,14 @@
         background: #e74c3c;
         transform: scale(1.03);
       }
+
       #selection-title {
         font-size: 32px;
         margin-bottom: 15px;
         text-shadow: 2px 2px 0 #000;
         color: #f1c40f;
       }
+
       .char-desc {
         font-size: 13px;
         font-family: Arial, sans-serif;
@@ -257,7 +259,7 @@
 
       const characterDB = {
         Illustrade: {
-          color: "#e67e22",
+          color: "#362F4F",
           hp: 100,
           damage: 1.0,
           speed: 2.3,
@@ -266,8 +268,8 @@
           wWidth: 8,
           rotSpeed: 0.03,
           ultName: "TYPOGRAPHY SPELL",
-          ultColor: "#8e44ad",
-          desc: "Pensil tdk ngasih dmg. Trail ngasih DoT (tiap 0.4s). Ult: Charge spell & Auto-Aim Runic Storm!",
+          ultColor: "#222222",
+          desc: "Pensil DoT. Ult: KEBAL saat Charge & Auto-Aim Runic Storm!",
           ultMax: 1500,
         },
         Valkyrie: {
@@ -324,7 +326,7 @@
           ultName: "TRICKSTER CLONE",
           ultColor: "#f1c40f",
           desc: "Tongkat ganda. Memanggil 2 Clone pembantu.",
-          ultMax: 350,
+          ultMax: 300,
         },
         Brawler: {
           color: "#2ecc71",
@@ -352,7 +354,7 @@
           ultName: "SPATIAL REND",
           ultColor: "#ffffff",
           desc: "Ult: Time stop map-wide slash!",
-          ultMax: 900,
+          ultMax: 1500,
         },
         Retaliator: {
           color: "#4a6572",
@@ -365,7 +367,7 @@
           rotSpeed: 0,
           ultName: "RETRIBUTION ZONE",
           ultColor: "#00d2d3",
-          desc: "Pasif: Reduce 50% damage masuk & counter attack saat musuh di jangkauan.",
+          desc: "Pasif: Swing saat diserang (-0.8 dmg/hit). Ult: Area auto-attack + Counter!",
           ultMax: 1500,
         },
         Stasis: {
@@ -432,7 +434,7 @@
                 "-" + finalDmg.toFixed(1),
                 this.target.x,
                 this.target.y - 12,
-                "#8e44ad",
+                "#222222",
               );
               this.life = 0;
             }
@@ -444,10 +446,10 @@
 
         draw() {
           ctx.save();
-          ctx.fillStyle = "#8e44ad";
+          ctx.fillStyle = "#222222";
           ctx.font = "bold 22px Arial";
-          ctx.shadowColor = "#3498db";
-          ctx.shadowBlur = 10;
+          ctx.shadowColor = "#555555";
+          ctx.shadowBlur = 6;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.fillText(this.char, this.x, this.y);
@@ -512,10 +514,6 @@
                       this.owner.y - 28,
                       "#00d2d3",
                     );
-                  }
-
-                  if (target.name === "Retaliator") {
-                    target.triggerRetaliation(this.owner);
                   }
 
                   spawnText(
@@ -608,7 +606,7 @@
 
           this.swingTimer = 0;
           this.zoneRadius = 140;
-          this.attackCooldown = 0;
+          this.combatTimer = 0;
 
           this.atkSpeed = 1.0;
           this.shootCooldown = 0;
@@ -619,7 +617,6 @@
           this.targetToKill = null;
           this.writingAnimTimer = 0;
 
-          // Illustrade Properties
           this.pencilTrails = [];
           this.illustradeChargeTimer = 0;
           this.floatingChars = [];
@@ -627,12 +624,27 @@
         }
 
         takeDamage(amount, attacker = null) {
-          let actualDamage = amount;
-          if (this.name === "Retaliator") {
-            actualDamage *= 0.5;
+          // Illustrade KEBAL saat Charge Ultimate
+          if (this.name === "Illustrade" && this.isUltActive) {
+            spawnText("IMMUNE!", this.x, this.y - 12, "#222222");
+            return 0;
           }
+
+          let actualDamage = amount;
+
+          // RETALIATOR MECHANIC: SELALU COUNTER SAAT DISERANG (BAIK ULT MAUPUN NON-ULT)
+          if (
+            this.name === "Retaliator" &&
+            attacker &&
+            attacker.team !== this.team
+          ) {
+            this.combatTimer = 180;
+            this.triggerRetaliation(attacker);
+          }
+
           this.hp -= actualDamage;
 
+          // Death Note Trigger
           if (this.name === "Death Note" && !this.hasBeenHit) {
             this.hasBeenHit = true;
             this.deathNoteTimer = 4000;
@@ -642,6 +654,56 @@
           }
 
           return actualDamage;
+        }
+
+        triggerRetaliation(target) {
+          if (!target) return;
+
+          // Arahkan pedang & jalankan animasi swing ke arah penyerang
+          let attackAngle = Math.atan2(target.y - this.y, target.x - this.x);
+          this.angle = attackAngle;
+          this.swingTimer = 18;
+          this.rotSpeed = 0.45;
+
+          let dist = Math.hypot(target.x - this.x, target.y - this.y);
+          let currentWLen = this.isUltActive
+            ? this.zoneRadius - this.radius
+            : this.wLen;
+          let maxRange = this.radius + currentWLen + target.radius;
+
+          // Jika musuh berada dalam jangkauan tebasan -> Berikan Damage & Kurangi Dmg Retaliator
+          if (dist <= maxRange) {
+            if (target.iFrames === 0 || this.isUltActive) {
+              let finalDmg = target.takeDamage(this.damage, this);
+              target.iFrames = 15;
+
+              // Pengurangan damage 0.8 per hit (min 2.0)
+              this.damage = Math.max(2.0, this.damage - 0.8);
+
+              spawnText(
+                "-" + finalDmg.toFixed(1),
+                target.x,
+                target.y - 12,
+                "#00d2d3",
+              );
+              effects.push({
+                type: "slash",
+                x: (this.x + target.x) / 2,
+                y: (this.y + target.y) / 2,
+                life: 15,
+                angle: attackAngle,
+              });
+            }
+          } else {
+            // Musuh di luar jangkauan (misal Stasis jauh) -> Ayunkan pedang & buat visual tebasan
+            effects.push({
+              type: "slash",
+              x: this.x + Math.cos(attackAngle) * (this.radius + 15),
+              y: this.y + Math.sin(attackAngle) * (this.radius + 15),
+              life: 10,
+              angle: attackAngle,
+            });
+          }
         }
 
         getWeaponSegments() {
@@ -666,50 +728,12 @@
           return segs;
         }
 
-        triggerRetaliation(target) {
-          if (this.name !== "Retaliator") return;
-
-          this.swingTimer = 18;
-          this.rotSpeed = 0.45;
-
-          if (!this.isUltActive) {
-            this.ultCharge = Math.min(this.ultMax, this.ultCharge + 60);
-          }
-
-          if (target && target.hp > 0) {
-            let dist = Math.hypot(target.x - this.x, target.y - this.y);
-            let reach = this.radius + this.wLen + target.radius;
-
-            if (dist <= reach && (target.iFrames === 0 || this.isUltActive)) {
-              let finalDmg = target.takeDamage(this.damage, this);
-              target.iFrames = 25;
-              spawnText(
-                "-" + finalDmg.toFixed(1),
-                target.x,
-                target.y - 12,
-                "#00d2d3",
-              );
-
-              effects.push({
-                type: "slash",
-                x: (this.x + target.x) / 2,
-                y: (this.y + target.y) / 2,
-                life: 15,
-                angle: Math.atan2(target.y - this.y, target.x - this.x),
-              });
-            }
-          }
-
-          this.damage = Math.max(2.0, this.damage - 0.8);
-        }
-
         draw() {
           if (!this.visible) return;
 
-          // Render Trail Tinta Illustrade
           if (this.pencilTrails.length > 1) {
             ctx.save();
-            ctx.strokeStyle = "rgba(44, 62, 80, 0.75)";
+            ctx.strokeStyle = "rgba(54, 47, 79, 0.75)";
             ctx.lineWidth = 6;
             ctx.lineCap = "round";
             ctx.lineJoin = "round";
@@ -723,7 +747,101 @@
             ctx.restore();
           }
 
-          // Render Spell Circle saat Illustrade Ultimate
+          if (
+            this.name === "Death Note" &&
+            this.hasBeenHit &&
+            this.deathNoteTimer > 0
+          ) {
+            ctx.save();
+            let pulse = Math.sin(this.writingAnimTimer * 0.1) * 6;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 12 + pulse, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(192, 57, 43, 0.25)";
+            ctx.fill();
+            ctx.strokeStyle = "#e74c3c";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            let bookX = this.x - 22;
+            let bookY = this.y - 68;
+            let bookW = 44;
+            let bookH = 32;
+
+            ctx.fillStyle = "#111111";
+            ctx.fillRect(bookX, bookY, bookW, bookH);
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 1.8;
+            ctx.strokeRect(bookX, bookY, bookW, bookH);
+
+            ctx.fillStyle = "#e74c3c";
+            ctx.fillRect(bookX + 4, bookY, 3, bookH);
+
+            ctx.strokeStyle = "#e74c3c";
+            ctx.lineWidth = 1.5;
+            let lineCount = Math.min(
+              5,
+              Math.floor(this.writingAnimTimer / 12) % 6,
+            );
+            for (let i = 0; i < lineCount; i++) {
+              ctx.beginPath();
+              ctx.moveTo(bookX + 10, bookY + 6 + i * 5);
+              ctx.lineTo(bookX + 34, bookY + 6 + i * 5);
+              ctx.stroke();
+            }
+
+            let penX = bookX + 12 + ((this.writingAnimTimer * 1.5) % 22);
+            let penY =
+              bookY +
+              6 +
+              lineCount * 4.5 +
+              Math.sin(this.writingAnimTimer * 0.3) * 2;
+
+            ctx.save();
+            ctx.translate(penX, penY);
+            ctx.rotate(-0.4 + Math.sin(this.writingAnimTimer * 0.4) * 0.2);
+
+            ctx.fillStyle = "#ecf0f1";
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(-6, -18);
+            ctx.lineTo(2, -14);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.strokeStyle = "#e74c3c";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(3, 4);
+            ctx.stroke();
+            ctx.restore();
+
+            let targetName = this.targetToKill
+              ? this.targetToKill.name
+              : "TARGET";
+            let seconds = Math.ceil(this.deathNoteTimer / 60);
+            let dots = ".".repeat(
+              1 + (Math.floor(this.writingAnimTimer / 15) % 3),
+            );
+
+            ctx.fillStyle = "#e74c3c";
+            ctx.font = "bold 14px Arial";
+            ctx.textAlign = "center";
+            ctx.shadowColor = "#000";
+            ctx.shadowBlur = 4;
+            ctx.fillText(
+              `WRITING ${targetName.toUpperCase()}${dots}`,
+              this.x,
+              this.y - 75,
+            );
+            ctx.fillText(
+              `DEATH IN: ${seconds}s`,
+              this.x,
+              this.y + this.radius + 18,
+            );
+            ctx.restore();
+          }
+
           if (this.name === "Illustrade" && this.isUltActive) {
             ctx.save();
             ctx.translate(this.x, this.y);
@@ -731,7 +849,7 @@
             this.spellCircleAngle += 0.02;
             ctx.rotate(this.spellCircleAngle);
 
-            ctx.strokeStyle = "rgba(142, 68, 173, 0.7)";
+            ctx.strokeStyle = "rgba(34, 34, 34, 0.85)";
             ctx.lineWidth = 3;
             ctx.beginPath();
             ctx.arc(0, 0, 70, 0, Math.PI * 2);
@@ -751,17 +869,17 @@
               if (i === 0) ctx.moveTo(rx, ry);
               else ctx.lineTo(rx, ry);
             }
-            ctx.strokeStyle = "rgba(52, 152, 219, 0.5)";
+            ctx.strokeStyle = "rgba(34, 34, 34, 0.45)";
             ctx.stroke();
 
             ctx.restore();
 
             this.floatingChars.forEach((fc) => {
               ctx.save();
-              ctx.fillStyle = "#8e44ad";
+              ctx.fillStyle = "#222222";
               ctx.font = "bold 20px Arial";
-              ctx.shadowColor = "#3498db";
-              ctx.shadowBlur = 8;
+              ctx.shadowColor = "#777777";
+              ctx.shadowBlur = 6;
               ctx.textAlign = "center";
               ctx.textBaseline = "middle";
               ctx.fillText(fc.char, fc.x, fc.y);
@@ -788,7 +906,7 @@
             ctx.lineTo(seg.p2.x, seg.p2.y);
             ctx.lineWidth = this.wWidth;
             ctx.strokeStyle = this.isUltActive ? "#f1c40f" : "#444";
-            if (this.name === "Illustrade") ctx.strokeStyle = "#e67e22";
+            if (this.name === "Illustrade") ctx.strokeStyle = "#362F4F";
             if (this.name === "Vessel") ctx.strokeStyle = "#8b0000";
             if (this.name === "Valkyrie") ctx.strokeStyle = "#87ceeb";
             if (this.name === "Retaliator") ctx.strokeStyle = "#00d2d3";
@@ -796,7 +914,7 @@
             ctx.stroke();
 
             if (this.name === "Illustrade") {
-              ctx.fillStyle = "#2c3e50";
+              ctx.fillStyle = "#222222";
               ctx.beginPath();
               ctx.arc(seg.p2.x, seg.p2.y, 4, 0, Math.PI * 2);
               ctx.fill();
@@ -824,7 +942,68 @@
         }
 
         update() {
-          // Illustrade Trail Update & Collision
+          if (this.name === "Retaliator") {
+            // Recovery damage saat tidak bertarung
+            if (this.combatTimer > 0) {
+              this.combatTimer--;
+            } else {
+              this.damage += 0.001;
+            }
+
+            let hasEnemyInZone = false;
+
+            // TAMBAHAN MEKANIK ULT: Auto attack musuh yang masuk ke dalam zone
+            if (this.isUltActive) {
+              this.vx = 0;
+              this.vy = 0;
+              this.wLen = this.zoneRadius - this.radius;
+
+              balls.forEach((enemy) => {
+                if (enemy.team !== this.team && enemy.hp > 0) {
+                  let dist = Math.hypot(enemy.x - this.x, enemy.y - this.y);
+                  if (dist <= this.radius + this.zoneRadius + enemy.radius) {
+                    hasEnemyInZone = true;
+                    if (enemy.iFrames === 0) {
+                      let finalDmg = enemy.takeDamage(this.damage, this);
+                      enemy.iFrames = 15;
+                      this.damage = Math.max(2.0, this.damage - 0.8);
+                      spawnText(
+                        "-" + finalDmg.toFixed(1),
+                        enemy.x,
+                        enemy.y - 12,
+                        "#00d2d3",
+                      );
+                      effects.push({
+                        type: "slash",
+                        x: enemy.x,
+                        y: enemy.y,
+                        life: 12,
+                        angle: Math.atan2(enemy.y - this.y, enemy.x - this.x),
+                      });
+                    }
+                  }
+                }
+              });
+
+              if (hasEnemyInZone) {
+                this.rotSpeed = 0.4;
+              }
+            }
+
+            // Reset swing animasi tebasan counter
+            if (this.swingTimer > 0) {
+              this.swingTimer--;
+              if (
+                this.swingTimer <= 0 &&
+                (!this.isUltActive || !hasEnemyInZone)
+              ) {
+                this.rotSpeed = 0;
+              }
+            } else if (!this.isUltActive || !hasEnemyInZone) {
+              this.rotSpeed = 0;
+            }
+          }
+
           if (this.name === "Illustrade") {
             let segs = this.getWeaponSegments();
             if (segs.length > 0) {
@@ -839,29 +1018,34 @@
               }
             }
 
-            // Continuous Trail Damage (Delay diubah menjadi 400ms / 0.4 detik)
             balls.forEach((enemy) => {
               if (enemy !== this && enemy.team !== this.team && enemy.hp > 0) {
-                for (let pt of this.pencilTrails) {
-                  let dist = Math.hypot(enemy.x - pt.x, enemy.y - pt.y);
-                  if (dist < enemy.radius + 4) {
-                    if (!pt.lastHitTick || Date.now() - pt.lastHitTick > 400) {
-                      pt.lastHitTick = Date.now();
-                      let finalDmg = enemy.takeDamage(this.damage, this);
-                      this.damage += 0.01;
-                      spawnText(
-                        "-" + finalDmg.toFixed(2),
-                        enemy.x,
-                        enemy.y - 12,
-                        "#e67e22",
-                      );
-                    }
+                let isTouchingInk = this.pencilTrails.some((pt) => {
+                  return (
+                    Math.hypot(enemy.x - pt.x, enemy.y - pt.y) <
+                    enemy.radius + 4
+                  );
+                });
+
+                if (isTouchingInk) {
+                  if (
+                    !enemy.lastInkHitTime ||
+                    Date.now() - enemy.lastInkHitTime >= 200
+                  ) {
+                    enemy.lastInkHitTime = Date.now();
+                    let finalDmg = enemy.takeDamage(this.damage, this);
+                    this.damage += 0.01;
+                    spawnText(
+                      "-" + finalDmg.toFixed(2),
+                      enemy.x,
+                      enemy.y - 12,
+                      "#362F4F",
+                    );
                   }
                 }
               }
             });
 
-            // Charging Spell Ultimate Illustrade
             if (this.isUltActive) {
               this.vx = 0;
               this.vy = 0;
@@ -900,6 +1084,10 @@
                 this.isUltActive = false;
                 this.ultCharge = 0;
                 this.bonusText = "";
+
+                let ang = Math.random() * Math.PI * 2;
+                this.vx = Math.cos(ang) * this.baseSpeed;
+                this.vy = Math.sin(ang) * this.baseSpeed;
               }
             }
           }
@@ -992,7 +1180,9 @@
 
           if (
             !this.isUltActive ||
-            (this.name !== "Brawler" && this.name !== "Illustrade")
+            (this.name !== "Brawler" &&
+              this.name !== "Illustrade" &&
+              this.name !== "Retaliator")
           ) {
             if (currentSpeed > targetSpeed) {
               this.vx *= 0.92;
@@ -1052,7 +1242,7 @@
             this.bonusText = "GRAVITY ORBIT!";
           } else if (this.name === "Retaliator") {
             this.bonusText = "RETRIBUTION ZONE!";
-            this.wLen = this.zoneRadius;
+            this.wLen = this.zoneRadius - this.radius;
           } else if (this.name === "Monkey King") {
             this.bonusText = "CLONES OUT!";
             for (let i = 0; i < 2; i++) {
@@ -1084,7 +1274,9 @@
             this.name !== "Stasis" &&
             this.name !== "Illustrade"
           ) {
-            let ultDuration = this.name === "Brawler" ? 1000 : 5000;
+            let ultDuration = 5000;
+            if (this.name === "Brawler") ultDuration = 1000;
+
             setTimeout(() => {
               this.isUltActive = false;
               this.ultCharge = 0;
@@ -1096,6 +1288,7 @@
                 let ang = Math.random() * Math.PI * 2;
                 this.vx = Math.cos(ang) * this.baseSpeed;
                 this.vy = Math.sin(ang) * this.baseSpeed;
+                this.rotSpeed = 0;
               }
             }, ultDuration);
           }
@@ -1204,8 +1397,6 @@
                       B.y - 12,
                       "#e74c3c",
                     );
-
-                    if (B.name === "Retaliator") B.triggerRetaliation(A);
                     break;
                   }
                 }
@@ -1250,8 +1441,6 @@
                       A.y - 12,
                       "#e74c3c",
                     );
-
-                    if (A.name === "Retaliator") A.triggerRetaliation(B);
                     break;
                   }
                 }
@@ -1292,7 +1481,6 @@
                   if (!A.isUltActive) {
                     A.damage += 1.0;
                   }
-                  if (B.name === "Retaliator") B.triggerRetaliation(A);
                 }
                 if (
                   B.weapons === 0 &&
@@ -1311,7 +1499,6 @@
                   if (!B.isUltActive) {
                     B.damage += 1.0;
                   }
-                  if (A.name === "Retaliator") A.triggerRetaliation(B);
                 }
               }
             }
