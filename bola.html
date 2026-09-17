@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Auto-Battler Arena - Divergent Update</title>
+    <title>Auto-Battler Arena - Infinity Update</title>
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Teko:wght@600&display=swap");
 
@@ -257,7 +257,6 @@
       const canvas = document.getElementById("gameCanvas");
       const ctx = canvas.getContext("2d");
 
-      // Load Sprite Senjata Monkey King
       const monkeyStaffImg = new Image();
       monkeyStaffImg.src = "assets/pixil-frame-0.png";
 
@@ -273,7 +272,7 @@
           rotSpeed: 0.03,
           ultName: "TYPOGRAPHY SPELL",
           ultColor: "#222222",
-          desc: "Pensil DoT. Ult: KEBAL saat Charge & Auto-Aim Runic Storm!",
+          desc: "Illustratting Ink trail",
           ultMax: 1500,
         },
         Valkyrie: {
@@ -287,7 +286,7 @@
           rotSpeed: 0.015,
           ultName: "VALHALLA",
           ultColor: "#a4c8e1",
-          desc: "1 Pedang panjang. Regen HP saat Ultimate.",
+          desc: "Gangotak regen e anjink",
           ultMax: 300,
         },
         Vessel: {
@@ -301,7 +300,7 @@
           rotSpeed: 0.02,
           ultName: "DETERMINATION",
           ultColor: "#c0392b",
-          desc: "HP 50. +0.5 Dmg saat diserang/nyerang. Ult Full: Resurrect (Refused Heart)!",
+          desc: "Ressurection, Low HP",
           ultMax: 1500,
         },
         Juggernaut: {
@@ -315,7 +314,7 @@
           rotSpeed: 0.01,
           ultName: "TITAN FORM",
           ultColor: "#7f8c8d",
-          desc: "2 Gada besar lambat. Kebal & Raksasa saat Ultimate.",
+          desc: "Giant",
           ultMax: 400,
         },
         "Monkey King": {
@@ -329,7 +328,7 @@
           rotSpeed: 0.016,
           ultName: "TRICKSTER CLONE",
           ultColor: "#f1c40f",
-          desc: "Tongkat ganda Ruyi. Memanggil 2 Clone pembantu.",
+          desc: "Cloner, RuyiStaff",
           ultMax: 350,
         },
         Brawler: {
@@ -343,7 +342,7 @@
           rotSpeed: 0,
           ultName: "GRAVITY ORBIT",
           ultColor: "#2ecc71",
-          desc: "TIDAK ADA SENJATA. Pasif: +1 Dmg/hit. Ult: Mengorbit 1s (CD 30s)!",
+          desc: "Handler, AldiGagah",
           ultMax: 1800,
         },
         Divergent: {
@@ -371,7 +370,7 @@
           rotSpeed: 0.03,
           ultName: "SPATIAL REND",
           ultColor: "#ffffff",
-          desc: "Atk Spd +0.5/hit + 3x After-slash (0.5 dmg). Ult: Time stop slash!",
+          desc: "Wide Slash, Atk Speed",
           ultMax: 3000,
         },
         Retaliator: {
@@ -385,7 +384,7 @@
           rotSpeed: 0,
           ultName: "RETRIBUTION ZONE",
           ultColor: "#00d2d3",
-          desc: "Base Dmg 2. +0.001 Dmg/tick. Ult Max 3000. Hit musuh +100 Ult Charge!",
+          desc: "Retaliate, Counter Attack",
           ultMax: 3000,
         },
         Stasis: {
@@ -399,7 +398,7 @@
           rotSpeed: 0,
           ultName: "TIME STOP BARRAGE",
           ultColor: "#00d2d3",
-          desc: "Marksman Pisau. Ult: Time Stop + 3x Atk Speed!",
+          desc: "Time Stop Atk Speed",
           ultMax: 1500,
         },
         "Death Note": {
@@ -413,8 +412,22 @@
           rotSpeed: 0,
           ultName: "DEATH SENTENCE",
           ultColor: "#2c3e50",
-          desc: "Saat diserang, tulis nama musuh. Musuh AUTO MATI saat timer habis!",
+          desc: "Auto hit, Auto kill",
           ultMax: 4000,
+        },
+        Infinity: {
+          color: "#ffffff",
+          hp: 100,
+          damage: 1.5,
+          speed: 2.8,
+          weapons: 0,
+          wLen: 0,
+          wWidth: 0,
+          rotSpeed: 0,
+          ultName: "UNLIMITED VOID",
+          ultColor: "#4B0082",
+          desc: "Six Eyes, Mugen, Hollow Purple",
+          ultMax: 5000,
         },
       };
 
@@ -424,6 +437,7 @@
       let p1Choice = null;
       let p2Choice = null;
       let effects = [];
+      let infinitySkills = [];
 
       class LetterProjectile {
         constructor(x, y, charStr, target, owner) {
@@ -436,18 +450,19 @@
           this.damage = owner.damage * 1.5;
           this.life = 200;
         }
-
         update() {
           if (this.target && this.target.hp > 0) {
-            let dx = this.target.x - this.x;
-            let dy = this.target.y - this.y;
+            let dx = this.target.x - this.x,
+              dy = this.target.y - this.y;
             let dist = Math.hypot(dx, dy) || 1;
-
             this.x += (dx / dist) * this.speed;
             this.y += (dy / dist) * this.speed;
-
             if (dist < this.target.radius + 12) {
-              let finalDmg = this.target.takeDamage(this.damage, this.owner);
+              let finalDmg = this.target.takeDamage(
+                this.damage,
+                this.owner,
+                true,
+              );
               spawnText(
                 "-" + finalDmg.toFixed(1),
                 this.target.x,
@@ -456,12 +471,9 @@
               );
               this.life = 0;
             }
-          } else {
-            this.life = 0;
-          }
+          } else this.life = 0;
           this.life--;
         }
-
         draw() {
           ctx.save();
           ctx.fillStyle = "#222222";
@@ -487,26 +499,21 @@
           this.hitTargets = new Set();
           this.life = 350;
           this.frozenInTime = isTimeStopCreated;
-
-          let dx = targetX - x;
-          let dy = targetY - y;
+          let dx = targetX - x,
+            dy = targetY - y;
           this.angle = Math.atan2(dy, dx);
           this.vx = Math.cos(this.angle) * this.speed;
           this.vy = Math.sin(this.angle) * this.speed;
         }
-
         update() {
           if (this.frozenInTime) return;
-
           if (this.delayTimer > 0) {
             this.delayTimer--;
             return;
           }
-
           this.x += this.vx;
           this.y += this.vy;
           this.life--;
-
           balls.forEach((target) => {
             if (
               target !== this.owner &&
@@ -516,10 +523,13 @@
               if (!this.hitTargets.has(target)) {
                 let dist = Math.hypot(target.x - this.x, target.y - this.y);
                 if (dist < target.radius + 10) {
-                  let finalDmg = target.takeDamage(this.damage, this.owner);
+                  let finalDmg = target.takeDamage(
+                    this.damage,
+                    this.owner,
+                    true,
+                  );
                   target.iFrames = 12;
                   this.hitTargets.add(target);
-
                   if (this.owner && this.owner.name === "Stasis") {
                     this.owner.atkSpeed += 0.01;
                     this.owner.ultCharge = Math.min(
@@ -533,14 +543,12 @@
                       "#00d2d3",
                     );
                   }
-
                   spawnText(
                     "-" + finalDmg.toFixed(1),
                     target.x,
                     target.y - 12,
                     "#00d2d3",
                   );
-
                   effects.push({
                     type: "slash",
                     x: this.x,
@@ -548,27 +556,20 @@
                     life: 10,
                     angle: this.angle,
                   });
-
-                  if (!this.pierce) {
-                    this.life = 0;
-                  }
+                  if (!this.pierce) this.life = 0;
                 }
               }
             }
           });
         }
-
         draw() {
           ctx.save();
           ctx.translate(this.x, this.y);
           ctx.rotate(this.angle);
-
           ctx.shadowColor = "#00d2d3";
           ctx.shadowBlur = this.frozenInTime || this.delayTimer > 0 ? 12 : 5;
-
           ctx.fillStyle = "#3d2b56";
           ctx.fillRect(-12, -3, 9, 6);
-
           ctx.fillStyle = "#ffffff";
           ctx.beginPath();
           ctx.moveTo(-3, -5);
@@ -576,11 +577,177 @@
           ctx.lineTo(-3, 5);
           ctx.closePath();
           ctx.fill();
-
           ctx.strokeStyle = "#00d2d3";
           ctx.lineWidth = 1.8;
           ctx.stroke();
+          ctx.restore();
+        }
+      }
 
+      class BlueOrb {
+        constructor(x, y, owner) {
+          this.x = x;
+          this.y = y;
+          this.owner = owner;
+          this.life = 150;
+          this.radius = 100;
+        }
+        update() {
+          this.life--;
+          balls.forEach((b) => {
+            if (b.team !== this.owner.team && b.hp > 0) {
+              let dx = this.x - b.x,
+                dy = this.y - b.y;
+              let dist = Math.hypot(dx, dy) || 1;
+              if (dist < this.radius) {
+                b.vx += (dx / dist) * 0.6;
+                b.vy += (dy / dist) * 0.6;
+                b.vx *= 0.75;
+                b.vy *= 0.75;
+                if (this.life % 20 === 0) {
+                  let dmg = b.takeDamage(0.3, this.owner);
+                  spawnText("-" + dmg.toFixed(1), b.x, b.y - 12, "#0984e3");
+                  this.owner.blueCD = Math.max(0, this.owner.blueCD - 3);
+                  this.owner.redCD = Math.max(0, this.owner.redCD - 3);
+                }
+              }
+            }
+          });
+        }
+        draw() {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(0, 168, 255, 0.1)";
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(
+            this.x,
+            this.y,
+            12 + Math.sin(this.life * 0.2) * 4,
+            0,
+            Math.PI * 2,
+          );
+          ctx.fillStyle = "#0984e3";
+          ctx.shadowColor = "#00a8ff";
+          ctx.shadowBlur = 12;
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      class RedWave {
+        constructor(x, y, target, owner) {
+          this.x = x;
+          this.y = y;
+          this.owner = owner;
+          this.life = 50;
+          let dx = target.x - x,
+            dy = target.y - y;
+          let angle = Math.atan2(dy, dx);
+          this.vx = Math.cos(angle) * 11;
+          this.vy = Math.sin(angle) * 11;
+          this.hitTargets = new Set();
+        }
+        update() {
+          this.x += this.vx;
+          this.y += this.vy;
+          this.life--;
+          balls.forEach((b) => {
+            if (
+              b.team !== this.owner.team &&
+              b.hp > 0 &&
+              !this.hitTargets.has(b)
+            ) {
+              let dist = Math.hypot(b.x - this.x, b.y - this.y);
+              if (dist < b.radius + 18) {
+                this.hitTargets.add(b);
+                let dmg = b.takeDamage(3, this.owner);
+                b.vx = this.vx * 1.2;
+                b.vy = this.vy * 1.2;
+                if (
+                  b.x < 50 ||
+                  b.x > canvas.width - 50 ||
+                  b.y < 50 ||
+                  b.y > canvas.height - 50
+                ) {
+                  b.stunTimer = 60;
+                  spawnText("WALL STUN!", b.x, b.y - 25, "#e74c3c");
+                }
+                this.owner.blueCD = Math.max(0, this.owner.blueCD - 5);
+                spawnText("-" + dmg.toFixed(1), b.x, b.y - 12, "#d63031");
+              }
+            }
+          });
+        }
+        draw() {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, 12, 0, Math.PI * 2);
+          ctx.fillStyle = "#d63031";
+          ctx.shadowColor = "#ff7675";
+          ctx.shadowBlur = 12;
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      // --- PERBAIKAN PADA HOLLOW PURPLE ---
+      class PurpleBeam {
+        constructor(x, y, target, owner, isBoosted) {
+          this.x = x;
+          this.y = y;
+          this.owner = owner;
+          this.life = 40;
+          let dx = target.x - x,
+            dy = target.y - y;
+          this.angle = Math.atan2(dy, dx);
+          this.isBoosted = isBoosted;
+          this.hasDealtDamage = false;
+        }
+        update() {
+          this.life--;
+          if (!this.hasDealtDamage && this.life <= 25) {
+            this.hasDealtDamage = true;
+            balls.forEach((b) => {
+              if (b.team !== this.owner.team && b.hp > 0) {
+                let cp = getClosestPointOnSegment(
+                  b,
+                  { x: this.x, y: this.y },
+                  {
+                    x: this.x + Math.cos(this.angle) * 1200,
+                    y: this.y + Math.sin(this.angle) * 1200,
+                  },
+                );
+                let dist = Math.hypot(b.x - cp.x, b.y - cp.y);
+                if (dist < 40) {
+                  let multiplier = this.isBoosted ? 1.5 : 1.0;
+                  let trueDamage = 5.0 * multiplier;
+
+                  // MENGGUNAKAN takeDamage BIAR TERBACA OLEH PASIF VESSEL
+                  let actualDmg = b.takeDamage(trueDamage, this.owner);
+                  spawnText(
+                    "PURPLE: -" + actualDmg.toFixed(1),
+                    b.x,
+                    b.y - 18,
+                    "#6c5ce7",
+                  );
+                }
+              }
+            });
+          }
+        }
+        draw() {
+          let progress = this.life / 40;
+          ctx.save();
+          ctx.translate(this.x, this.y);
+          ctx.rotate(this.angle);
+          ctx.beginPath();
+          ctx.rect(0, -30 * progress, 1200, 60 * progress);
+          ctx.fillStyle = `rgba(108, 92, 231, ${progress})`;
+          ctx.shadowColor = "#a29bfe";
+          ctx.shadowBlur = 16;
+          ctx.fill();
           ctx.restore();
         }
       }
@@ -612,48 +779,56 @@
           this.damage = stats.damage;
 
           this.atkSpeed = 1.0;
-
           this.ultCharge = 0;
           this.ultMax = stats.ultMax || 400;
           this.isUltActive = false;
           this.bonusText = "";
-
           this.parryCooldown = 0;
           this.iFrames = 0;
-
           this.visible = true;
           this.timeStopTimer = 0;
-
           this.swingTimer = 0;
           this.zoneRadius = 140;
           this.combatTimer = 0;
-
           this.shootCooldown = 0;
           this.stasisUltTimer = 0;
-
           this.hasBeenHit = false;
           this.deathNoteTimer = 0;
           this.targetToKill = null;
           this.writingAnimTimer = 0;
-
           this.pencilTrails = [];
           this.illustradeChargeTimer = 0;
           this.floatingChars = [];
           this.spellCircleAngle = 0;
 
-          // Variabel Pasif Divergent (Dibuat Lebih Lambat)
           this.bfTarget = Math.random() * 100;
-          this.bfSpeed = 0.4; // Kecepatan dasar diperlambat
+          this.bfSpeed = 0.4;
+          this.blueCD = 0;
+          this.redCD = 0;
+          this.purpleCD = 0;
+          this.purpleComboTimer = 0;
+          this.mugenCD = 0;
+          this.domainTimer = 0;
+          this.domainDebuffTimer = 0;
+          this.stunTimer = 0;
         }
 
-        takeDamage(amount, attacker = null) {
+        takeDamage(amount, attacker = null, isProjectile = false) {
           if (this.name === "Illustrade" && this.isUltActive) {
             spawnText("IMMUNE!", this.x, this.y - 12, "#222222");
             return 0;
           }
+          if (this.name === "Infinity") {
+            if (isProjectile && this.mugenCD <= 0) {
+              this.mugenCD = 600;
+              spawnText("LIMITLESS BLOCK!", this.x, this.y - 25, "#ffffff");
+              return 0;
+            }
+            if (!isProjectile) amount *= 0.8;
+          }
+          if (this.domainDebuffTimer > 0) amount *= 1.4;
 
           let actualDamage = amount;
-
           if (
             this.name === "Retaliator" &&
             attacker &&
@@ -662,12 +837,12 @@
             this.combatTimer = 180;
             this.triggerRetaliation(attacker);
           }
-
           if (this.name === "Vessel") {
             this.damage += 0.5;
             spawnText("+0.5 DMG!", this.x, this.y - 25, "#c0392b");
           }
 
+          // PASIF VESSEL "BUT IT REFUSED!"
           if (
             this.name === "Vessel" &&
             this.hp - actualDamage <= 0 &&
@@ -678,7 +853,6 @@
             this.isUltActive = false;
             this.bonusText = "";
             this.iFrames = 60;
-
             spawnText("BUT IT REFUSED!", this.x, this.y - 35, "#c0392b");
             effects.push({
               type: "heart_refuse",
@@ -687,12 +861,10 @@
               life: 60,
               maxLife: 60,
             });
-
             return 0;
           }
 
           this.hp -= actualDamage;
-
           if (this.name === "Death Note" && !this.hasBeenHit) {
             this.hasBeenHit = true;
             this.deathNoteTimer = 4000;
@@ -700,18 +872,15 @@
               attacker || balls.find((b) => b.team !== this.team && !b.isClone);
             spawnText("DEATH NOTE WRITING...", this.x, this.y - 30, "#e74c3c");
           }
-
           return actualDamage;
         }
 
         triggerRetaliation(target) {
           if (!target) return;
-
           let attackAngle = Math.atan2(target.y - this.y, target.x - this.x);
           this.angle = attackAngle;
           this.swingTimer = 18;
           this.rotSpeed = 0.45;
-
           let dist = Math.hypot(target.x - this.x, target.y - this.y);
           let currentWLen = this.isUltActive
             ? this.zoneRadius - this.radius
@@ -722,14 +891,11 @@
             if (target.iFrames === 0 || this.isUltActive) {
               let finalDmg = target.takeDamage(this.damage, this);
               target.iFrames = 15;
-
               this.damage = Math.max(2.0, this.damage - 0.8);
-
               if (!this.isUltActive) {
                 this.ultCharge = Math.min(this.ultMax, this.ultCharge + 100);
                 spawnText("+100 Ult!", this.x, this.y - 25, "#00d2d3");
               }
-
               spawnText(
                 "-" + finalDmg.toFixed(1),
                 target.x,
@@ -780,7 +946,26 @@
         draw() {
           if (!this.visible) return;
 
-          // Aura Energi Terkutuk untuk Divergent
+          if (this.name === "Infinity") {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(
+              this.x,
+              this.y,
+              this.radius + 6 + Math.sin(Date.now() * 0.01) * 3,
+              0,
+              Math.PI * 2,
+            );
+            ctx.fillStyle = "rgba(108, 92, 231, 0.2)";
+            ctx.fill();
+            ctx.shadowColor = "#6c5ce7";
+            ctx.shadowBlur = 10;
+            ctx.strokeStyle = "rgba(108, 92, 231, 0.6)";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.restore();
+          }
+
           if (this.name === "Divergent") {
             ctx.save();
             ctx.beginPath();
@@ -831,21 +1016,17 @@
             ctx.strokeStyle = "#e74c3c";
             ctx.lineWidth = 2;
             ctx.stroke();
-
-            let bookX = this.x - 22;
-            let bookY = this.y - 68;
-            let bookW = 44;
-            let bookH = 32;
-
+            let bookX = this.x - 22,
+              bookY = this.y - 68,
+              bookW = 44,
+              bookH = 32;
             ctx.fillStyle = "#111111";
             ctx.fillRect(bookX, bookY, bookW, bookH);
             ctx.strokeStyle = "#ffffff";
             ctx.lineWidth = 1.8;
             ctx.strokeRect(bookX, bookY, bookW, bookH);
-
             ctx.fillStyle = "#e74c3c";
             ctx.fillRect(bookX + 4, bookY, 3, bookH);
-
             ctx.strokeStyle = "#e74c3c";
             ctx.lineWidth = 1.5;
             let lineCount = Math.min(
@@ -858,18 +1039,15 @@
               ctx.lineTo(bookX + 34, bookY + 6 + i * 5);
               ctx.stroke();
             }
-
             let penX = bookX + 12 + ((this.writingAnimTimer * 1.5) % 22);
             let penY =
               bookY +
               6 +
               lineCount * 4.5 +
               Math.sin(this.writingAnimTimer * 0.3) * 2;
-
             ctx.save();
             ctx.translate(penX, penY);
             ctx.rotate(-0.4 + Math.sin(this.writingAnimTimer * 0.4) * 0.2);
-
             ctx.fillStyle = "#ecf0f1";
             ctx.beginPath();
             ctx.moveTo(0, 0);
@@ -877,7 +1055,6 @@
             ctx.lineTo(2, -14);
             ctx.closePath();
             ctx.fill();
-
             ctx.strokeStyle = "#e74c3c";
             ctx.lineWidth = 2;
             ctx.beginPath();
@@ -885,7 +1062,6 @@
             ctx.lineTo(3, 4);
             ctx.stroke();
             ctx.restore();
-
             let targetName = this.targetToKill
               ? this.targetToKill.name
               : "TARGET";
@@ -893,7 +1069,6 @@
             let dots = ".".repeat(
               1 + (Math.floor(this.writingAnimTimer / 15) % 3),
             );
-
             ctx.fillStyle = "#e74c3c";
             ctx.font = "bold 14px Arial";
             ctx.textAlign = "center";
@@ -915,22 +1090,18 @@
           if (this.name === "Illustrade" && this.isUltActive) {
             ctx.save();
             ctx.translate(this.x, this.y);
-
             this.spellCircleAngle += 0.02;
             ctx.rotate(this.spellCircleAngle);
-
             ctx.strokeStyle = "rgba(34, 34, 34, 0.85)";
             ctx.lineWidth = 3;
             ctx.beginPath();
             ctx.arc(0, 0, 70, 0, Math.PI * 2);
             ctx.stroke();
-
             ctx.beginPath();
             ctx.arc(0, 0, 50, 0, Math.PI * 2);
             ctx.setLineDash([6, 6]);
             ctx.stroke();
             ctx.setLineDash([]);
-
             ctx.beginPath();
             for (let i = 0; i < 6; i++) {
               let a = (i * Math.PI) / 3;
@@ -941,9 +1112,7 @@
             }
             ctx.strokeStyle = "rgba(34, 34, 34, 0.45)";
             ctx.stroke();
-
             ctx.restore();
-
             this.floatingChars.forEach((fc) => {
               ctx.save();
               ctx.fillStyle = "#222222";
@@ -974,8 +1143,7 @@
             ctx.translate(this.x, this.y);
             ctx.rotate(this.angle - Math.PI / 4);
             let totalLen = (this.radius + this.wLen) * 2;
-
-            if (monkeyStaffImg.complete && monkeyStaffImg.naturalWidth !== 0) {
+            if (monkeyStaffImg.complete && monkeyStaffImg.naturalWidth !== 0)
               ctx.drawImage(
                 monkeyStaffImg,
                 -totalLen / 2,
@@ -983,7 +1151,7 @@
                 totalLen,
                 totalLen,
               );
-            } else {
+            else {
               let segs = this.getWeaponSegments();
               segs.forEach((seg) => {
                 ctx.beginPath();
@@ -1010,7 +1178,6 @@
               if (this.name === "Retaliator") ctx.strokeStyle = "#00d2d3";
               ctx.lineCap = "round";
               ctx.stroke();
-
               if (this.name === "Illustrade") {
                 ctx.fillStyle = "#222222";
                 ctx.beginPath();
@@ -1020,11 +1187,10 @@
             });
           }
 
-          if (this.iFrames > 0 && Math.floor(this.iFrames / 3) % 2 === 0) {
+          if (this.iFrames > 0 && Math.floor(this.iFrames / 3) % 2 === 0)
             ctx.fillStyle = "#ffaaaa";
-          } else {
+          else
             ctx.fillStyle = this.name === "Death Note" ? "#111111" : "#ffffff";
-          }
 
           ctx.beginPath();
           ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
@@ -1032,42 +1198,137 @@
           ctx.lineWidth = 4;
           ctx.strokeStyle = this.color;
           ctx.stroke();
-
           ctx.fillStyle = this.name === "Death Note" ? "#ffffff" : "#000000";
           ctx.font = `bold ${this.isClone ? 12 : 20}px Arial`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.fillText(Math.floor(this.hp), this.x, this.y);
+
+          if (this.stunTimer > 0 || this.domainDebuffTimer > 0) {
+            ctx.save();
+            let t = Date.now() * 0.01;
+            ctx.strokeStyle = "#f1c40f";
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            for (let a = 0; a < Math.PI * 4; a += 0.25) {
+              let r = 3 + a * 2.2;
+              let sx = this.x + Math.cos(a + t) * r;
+              let sy = this.y - this.radius - 14 + Math.sin(a + t) * (r * 0.35);
+              if (a === 0) ctx.moveTo(sx, sy);
+              else ctx.lineTo(sx, sy);
+            }
+            ctx.stroke();
+            ctx.restore();
+          }
         }
 
         update() {
-          // Logika Fluktuasi Bar Pasif Divergent (Diperhalus & Diperlambat)
-          if (this.name === "Divergent") {
-            if (Math.abs(this.ultCharge - this.bfTarget) < 2) {
-              this.bfTarget = Math.random() * 100;
-              this.bfSpeed = 0.2 + Math.random() * 0.6; // Kecepatan gerak lebih santai (0.2 - 0.8 per frame)
+          if (this.stunTimer > 0) {
+            this.stunTimer--;
+            this.vx = 0;
+            this.vy = 0;
+            if (this.domainDebuffTimer > 0) this.domainDebuffTimer--;
+
+            if (this.stunTimer === 0) {
+              let ang = Math.random() * Math.PI * 2;
+              this.vx = Math.cos(ang) * this.baseSpeed;
+              this.vy = Math.sin(ang) * this.baseSpeed;
             }
-            if (this.ultCharge < this.bfTarget) {
-              this.ultCharge = Math.min(100, this.ultCharge + this.bfSpeed);
+            return;
+          }
+
+          if (this.name === "Infinity") {
+            if (this.mugenCD > 0) this.mugenCD--;
+            if (this.blueCD > 0) this.blueCD--;
+            if (this.redCD > 0) this.redCD--;
+            if (this.purpleCD > 0) this.purpleCD--;
+            if (this.purpleComboTimer > 0) this.purpleComboTimer--;
+
+            if (this.isUltActive) {
+              this.domainTimer--;
+              this.vx = 0;
+              this.vy = 0;
+
+              let domainDmg = 0.5;
+
+              balls.forEach((b) => {
+                if (b.team !== this.team && b.hp > 0) {
+                  b.vx = 0;
+                  b.vy = 0;
+                  b.stunTimer = 5;
+                  b.domainDebuffTimer = 10;
+
+                  if (this.domainTimer % 15 === 0) {
+                    let dmgDone = b.takeDamage(domainDmg, this);
+                    spawnText(
+                      "-" + dmgDone.toFixed(1),
+                      b.x,
+                      b.y - 15,
+                      "#a29bfe",
+                    );
+                  }
+                }
+              });
+
+              if (this.domainTimer <= 0) {
+                this.isUltActive = false;
+                this.bonusText = "";
+                let ang = Math.random() * Math.PI * 2;
+                this.vx = Math.cos(ang) * this.baseSpeed;
+                this.vy = Math.sin(ang) * this.baseSpeed;
+              }
             } else {
-              this.ultCharge = Math.max(0, this.ultCharge - this.bfSpeed);
+              let enemy = balls.find((b) => b.team !== this.team && b.hp > 0);
+              if (enemy) {
+                if (
+                  this.purpleCD <= 0 &&
+                  (this.purpleComboTimer > 0 || Math.random() < 0.008)
+                ) {
+                  let isBoosted = this.purpleComboTimer > 0;
+                  infinitySkills.push(
+                    new PurpleBeam(this.x, this.y, enemy, this, isBoosted),
+                  );
+                  this.purpleCD = 900;
+                  this.purpleComboTimer = 0;
+                  spawnText(
+                    isBoosted ? "HOLLOW PURPLE (150%)!" : "HOLLOW PURPLE!",
+                    this.x,
+                    this.y - 30,
+                    "#6c5ce7",
+                  );
+                } else if (this.blueCD <= 0) {
+                  infinitySkills.push(new BlueOrb(enemy.x, enemy.y, this));
+                  this.blueCD = 480;
+                  this.purpleComboTimer = 120;
+                  spawnText("LAPSE: BLUE", this.x, this.y - 30, "#0984e3");
+                } else if (this.redCD <= 0) {
+                  infinitySkills.push(new RedWave(this.x, this.y, enemy, this));
+                  this.redCD = 600;
+                  this.purpleComboTimer = 120;
+                  spawnText("REVERSAL: RED", this.x, this.y - 30, "#d63031");
+                }
+              }
             }
           }
 
-          if (this.name === "Retaliator") {
-            if (this.combatTimer > 0) {
-              this.combatTimer--;
-            } else {
-              this.damage += 0.001;
+          if (this.name === "Divergent") {
+            if (Math.abs(this.ultCharge - this.bfTarget) < 2) {
+              this.bfTarget = Math.random() * 100;
+              this.bfSpeed = 0.2 + Math.random() * 0.6;
             }
+            if (this.ultCharge < this.bfTarget)
+              this.ultCharge = Math.min(100, this.ultCharge + this.bfSpeed);
+            else this.ultCharge = Math.max(0, this.ultCharge - this.bfSpeed);
+          }
 
+          if (this.name === "Retaliator") {
+            if (this.combatTimer > 0) this.combatTimer--;
+            else this.damage += 0.001;
             let hasEnemyInZone = false;
-
             if (this.isUltActive) {
               this.vx = 0;
               this.vy = 0;
               this.wLen = this.zoneRadius - this.radius;
-
               balls.forEach((enemy) => {
                 if (enemy.team !== this.team && enemy.hp > 0) {
                   let dist = Math.hypot(enemy.x - this.x, enemy.y - this.y);
@@ -1094,23 +1355,16 @@
                   }
                 }
               });
-
-              if (hasEnemyInZone) {
-                this.rotSpeed = 0.4;
-              }
+              if (hasEnemyInZone) this.rotSpeed = 0.4;
             }
-
             if (this.swingTimer > 0) {
               this.swingTimer--;
               if (
                 this.swingTimer <= 0 &&
                 (!this.isUltActive || !hasEnemyInZone)
-              ) {
+              )
                 this.rotSpeed = 0;
-              }
-            } else if (!this.isUltActive || !hasEnemyInZone) {
-              this.rotSpeed = 0;
-            }
+            } else if (!this.isUltActive || !hasEnemyInZone) this.rotSpeed = 0;
           }
 
           if (this.name === "Illustrade") {
@@ -1119,23 +1373,18 @@
               let tip = segs[0].p2;
               this.pencilTrails.push({ x: tip.x, y: tip.y, life: 250 });
             }
-
             for (let i = this.pencilTrails.length - 1; i >= 0; i--) {
               this.pencilTrails[i].life--;
-              if (this.pencilTrails[i].life <= 0) {
+              if (this.pencilTrails[i].life <= 0)
                 this.pencilTrails.splice(i, 1);
-              }
             }
-
             balls.forEach((enemy) => {
               if (enemy !== this && enemy.team !== this.team && enemy.hp > 0) {
-                let isTouchingInk = this.pencilTrails.some((pt) => {
-                  return (
+                let isTouchingInk = this.pencilTrails.some(
+                  (pt) =>
                     Math.hypot(enemy.x - pt.x, enemy.y - pt.y) <
-                    enemy.radius + 4
-                  );
-                });
-
+                    enemy.radius + 4,
+                );
                 if (isTouchingInk) {
                   if (
                     !enemy.lastInkHitTime ||
@@ -1159,11 +1408,9 @@
               this.vx = 0;
               this.vy = 0;
               this.illustradeChargeTimer--;
-
               let targetCount = Math.floor(8 + this.damage * 5);
               let charsPool =
                 "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz";
-
               if (
                 this.floatingChars.length < targetCount &&
                 Math.random() < 0.25
@@ -1179,21 +1426,18 @@
                   y: this.y + Math.sin(angle) * dist,
                 });
               }
-
               if (this.illustradeChargeTimer <= 0) {
                 let enemy = balls.find((b) => b.team !== this.team && b.hp > 0);
-                if (enemy) {
-                  this.floatingChars.forEach((fc) => {
+                if (enemy)
+                  this.floatingChars.forEach((fc) =>
                     projectiles.push(
                       new LetterProjectile(fc.x, fc.y, fc.char, enemy, this),
-                    );
-                  });
-                }
+                    ),
+                  );
                 this.floatingChars = [];
                 this.isUltActive = false;
                 this.ultCharge = 0;
                 this.bonusText = "";
-
                 let ang = Math.random() * Math.PI * 2;
                 this.vx = Math.cos(ang) * this.baseSpeed;
                 this.vy = Math.sin(ang) * this.baseSpeed;
@@ -1206,7 +1450,6 @@
               this.deathNoteTimer--;
               this.writingAnimTimer++;
               this.ultCharge = 4000 - this.deathNoteTimer;
-
               if (this.deathNoteTimer <= 0) {
                 let target =
                   this.targetToKill ||
@@ -1229,25 +1472,18 @@
               balls.find(
                 (b) => b.team !== this.team && b.hp > 0 && !b.isClone,
               ) || balls.find((b) => b.team !== this.team && b.hp > 0);
-
             if (enemy) {
-              let dx = enemy.x - this.x;
-              let dy = enemy.y - this.y;
+              let dx = enemy.x - this.x,
+                dy = enemy.y - this.y;
               let dist = Math.hypot(dx, dy) || 1;
-              let ux = dx / dist;
-              let uy = dy / dist;
-
-              let pullForce = 0.45;
-              let orbitForce = 0.45;
-
-              this.vx += ux * pullForce + -uy * orbitForce;
-              this.vy += uy * pullForce + ux * orbitForce;
-
+              let ux = dx / dist,
+                uy = dy / dist;
+              this.vx += ux * 0.45 + -uy * 0.45;
+              this.vy += uy * 0.45 + ux * 0.45;
               let currentSpd = Math.hypot(this.vx, this.vy);
-              let maxSpd = 5.5;
-              if (currentSpd > maxSpd) {
-                this.vx = (this.vx / currentSpd) * maxSpd;
-                this.vy = (this.vy / currentSpd) * maxSpd;
+              if (currentSpd > 5.5) {
+                this.vx = (this.vx / currentSpd) * 5.5;
+                this.vy = (this.vy / currentSpd) * 5.5;
               }
             }
           }
@@ -1270,7 +1506,6 @@
                     this.isUltActive,
                   ),
                 );
-
                 let effectiveAtkSpeed = this.isUltActive
                   ? this.atkSpeed * 3
                   : this.atkSpeed;
@@ -1280,13 +1515,11 @@
           }
 
           this.angle += this.rotSpeed;
-
           if (this.parryCooldown > 0) this.parryCooldown--;
           if (this.iFrames > 0) this.iFrames--;
 
           let currentSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
           let targetSpeed = this.baseSpeed;
-
           if (
             !this.isUltActive ||
             (this.name !== "Brawler" &&
@@ -1331,22 +1564,24 @@
             if (this.ultCharge >= this.ultMax) this.activateUlt();
           }
 
-          if (this.isUltActive && this.name === "Valkyrie") {
+          if (this.isUltActive && this.name === "Valkyrie")
             this.hp = Math.min(this.maxHp, this.hp + 0.4);
-          }
         }
 
         activateUlt() {
           this.isUltActive = true;
-
           if (this.name === "Vessel") {
             this.bonusText = "DETERMINED!";
             return;
           }
-
           this.ultCharge = 0;
 
-          if (this.name === "Illustrade") {
+          if (this.name === "Infinity") {
+            this.bonusText = "UNLIMITED VOID!";
+            this.domainTimer = 240;
+            this.blueCD = 0;
+            this.redCD = 0;
+          } else if (this.name === "Illustrade") {
             this.bonusText = "SPELL CHARGING...";
             this.illustradeChargeTimer = 180;
             this.floatingChars = [];
@@ -1387,18 +1622,16 @@
           if (
             this.name !== "Sword Saint" &&
             this.name !== "Stasis" &&
-            this.name !== "Illustrade"
+            this.name !== "Illustrade" &&
+            this.name !== "Infinity"
           ) {
-            let ultDuration = 5000;
-            if (this.name === "Brawler") ultDuration = 1000;
-
+            let ultDuration = this.name === "Brawler" ? 1000 : 5000;
             setTimeout(() => {
               this.isUltActive = false;
               this.ultCharge = 0;
               this.bonusText = "";
               this.radius = this.baseRadius;
               this.wLen = this.baseWLen;
-
               if (this.name === "Retaliator" || this.name === "Brawler") {
                 let ang = Math.random() * Math.PI * 2;
                 this.vx = Math.cos(ang) * this.baseSpeed;
@@ -1419,7 +1652,6 @@
           attacker.atkSpeed += 0.5;
           attacker.rotSpeed = attacker.baseRotSpeed * attacker.atkSpeed;
           spawnText("+0.5 Atk Spd!", attacker.x, attacker.y - 25, "#3498db");
-
           for (let k = 1; k <= 3; k++) {
             effects.push({
               type: "swordsaint_aftereffect",
@@ -1438,17 +1670,64 @@
         }
       }
 
+      function drawUnlimitedVoidBG() {
+        ctx.save();
+        ctx.fillStyle = "#030108";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        let cx = canvas.width / 2;
+        let cy = canvas.height / 2;
+        let time = Date.now() * 0.0025;
+
+        let grad = ctx.createRadialGradient(cx, cy, 15, cx, cy, 240);
+        grad.addColorStop(0, "#ffffff");
+        grad.addColorStop(0.12, "rgba(162, 155, 254, 0.9)");
+        grad.addColorStop(0.35, "rgba(108, 92, 231, 0.7)");
+        grad.addColorStop(0.7, "rgba(75, 0, 130, 0.5)");
+        grad.addColorStop(1, "rgba(3, 1, 8, 0.95)");
+
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+        ctx.lineWidth = 1.5;
+        let rays = 18;
+        for (let i = 0; i < rays; i++) {
+          let ang = (i * Math.PI * 2) / rays + time * 0.3;
+          ctx.beginPath();
+          ctx.moveTo(cx + Math.cos(ang) * 20, cy + Math.sin(ang) * 20);
+          ctx.lineTo(cx + Math.cos(ang) * 320, cy + Math.sin(ang) * 320);
+          ctx.stroke();
+        }
+
+        for (let r = 1; r <= 3; r++) {
+          let radius = ((time * 50 + r * 65) % 220) + 15;
+          let alpha = 1 - radius / 230;
+          ctx.beginPath();
+          ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(162, 155, 254, ${alpha * 0.8})`;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+
+        ctx.fillStyle = "rgba(255, 255, 255, 0.22)";
+        ctx.font = "bold 26px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("無 量 空 處", cx, cy + 180);
+
+        ctx.restore();
+      }
+
       function checkPhysicsAndHits() {
         for (let i = 0; i < balls.length; i++) {
           let A = balls[i];
           for (let j = i + 1; j < balls.length; j++) {
             let B = balls[j];
-
-            let dx = B.x - A.x;
-            let dy = B.y - A.y;
+            let dx = B.x - A.x,
+              dy = B.y - A.y;
             let dist = Math.sqrt(dx * dx + dy * dy);
             let isEnemy = A.team !== B.team;
-
             let aCanParry = !(A.name === "Retaliator" && A.isUltActive);
             let bCanParry = !(B.name === "Retaliator" && B.isUltActive);
 
@@ -1471,19 +1750,15 @@
                 }
                 if (parryHit) break;
               }
-
               if (parryHit) {
                 A.rotSpeed *= -1;
                 B.rotSpeed *= -1;
-
-                let nx = dx / (dist || 1);
-                let ny = dy / (dist || 1);
-                let pushSpeed = 5;
-                A.vx = -nx * pushSpeed;
-                A.vy = -ny * pushSpeed;
-                B.vx = nx * pushSpeed;
-                B.vy = ny * pushSpeed;
-
+                let nx = dx / (dist || 1),
+                  ny = dy / (dist || 1);
+                A.vx = -nx * 5;
+                A.vy = -ny * 5;
+                B.vx = nx * 5;
+                B.vy = ny * 5;
                 A.parryCooldown = 18;
                 B.parryCooldown = 18;
                 spawnText(
@@ -1509,24 +1784,20 @@
                     sa.p1,
                     sa.p2,
                   );
-                  let cDx = B.x - cp.x;
-                  let cDy = B.y - cp.y;
-                  let cDist = Math.sqrt(cDx * cDx + cDy * cDy);
-
+                  let cDx = B.x - cp.x,
+                    cDy = B.y - cp.y,
+                    cDist = Math.sqrt(cDx * cDx + cDy * cDy);
                   if (cDist < B.radius) {
                     let overlap = B.radius - cDist;
-                    let nx = cDist > 0 ? cDx / cDist : 1;
-                    let ny = cDist > 0 ? cDy / cDist : 0;
+                    let nx = cDist > 0 ? cDx / cDist : 1,
+                      ny = cDist > 0 ? cDy / cDist : 0;
                     B.x += nx * overlap;
                     B.y += ny * overlap;
-
                     B.vx *= -1;
                     B.vy *= -1;
                     A.rotSpeed *= -1;
-
                     let finalDmg = B.takeDamage(A.damage, A);
                     B.iFrames = 60;
-
                     if (A.name === "Vessel") {
                       A.damage += 0.5;
                       A.ultCharge = Math.min(A.ultMax, A.ultCharge + 50);
@@ -1537,7 +1808,6 @@
                         "#c0392b",
                       );
                     }
-
                     if (
                       (A.name === "Sword Saint" || A.name === "Retaliator") &&
                       !A.isUltActive
@@ -1550,9 +1820,7 @@
                         A.name === "Sword Saint" ? "#ffffff" : "#00d2d3",
                       );
                     }
-
                     triggerSwordSaintEffect(A, B);
-
                     spawnText(
                       "-" + finalDmg.toFixed(1),
                       B.x,
@@ -1576,24 +1844,20 @@
                     sb.p1,
                     sb.p2,
                   );
-                  let cDx = A.x - cp.x;
-                  let cDy = A.y - cp.y;
-                  let cDist = Math.sqrt(cDx * cDx + cDy * cDy);
-
+                  let cDx = A.x - cp.x,
+                    cDy = A.y - cp.y,
+                    cDist = Math.sqrt(cDx * cDx + cDy * cDy);
                   if (cDist < A.radius) {
                     let overlap = A.radius - cDist;
-                    let nx = cDist > 0 ? cDx / cDist : 1;
-                    let ny = cDist > 0 ? cDy / cDist : 0;
+                    let nx = cDist > 0 ? cDx / cDist : 1,
+                      ny = cDist > 0 ? cDy / cDist : 0;
                     A.x += nx * overlap;
                     A.y += ny * overlap;
-
                     A.vx *= -1;
                     A.vy *= -1;
                     B.rotSpeed *= -1;
-
                     let finalDmg = A.takeDamage(B.damage, B);
                     A.iFrames = 60;
-
                     if (B.name === "Vessel") {
                       B.damage += 0.5;
                       B.ultCharge = Math.min(B.ultMax, B.ultCharge + 50);
@@ -1604,7 +1868,6 @@
                         "#c0392b",
                       );
                     }
-
                     if (
                       (B.name === "Sword Saint" || B.name === "Retaliator") &&
                       !B.isUltActive
@@ -1617,9 +1880,7 @@
                         B.name === "Sword Saint" ? "#ffffff" : "#00d2d3",
                       );
                     }
-
                     triggerSwordSaintEffect(B, A);
-
                     spawnText(
                       "-" + finalDmg.toFixed(1),
                       A.x,
@@ -1634,13 +1895,12 @@
 
             if (dist < A.radius + B.radius) {
               let overlap = (A.radius + B.radius - dist) / 2;
-              let nx = dx / (dist || 1);
-              let ny = dy / (dist || 1);
+              let nx = dx / (dist || 1),
+                ny = dy / (dist || 1);
               A.x -= nx * overlap;
               A.y -= ny * overlap;
               B.x += nx * overlap;
               B.y += ny * overlap;
-
               let tempVx = A.vx,
                 tempVy = A.vy;
               A.vx = B.vx;
@@ -1649,29 +1909,24 @@
               B.vy = tempVy;
 
               if (isEnemy) {
-                // Serangan Fisik Karakter Tanpa Senjata (Brawler & Divergent)
                 if (
                   A.weapons === 0 &&
                   B.iFrames === 0 &&
-                  (A.name === "Brawler" || A.name === "Divergent")
+                  (A.name === "Brawler" ||
+                    A.name === "Divergent" ||
+                    A.name === "Infinity")
                 ) {
-                  let isBlackFlash = false;
-                  let hitDmg = A.damage;
-
+                  let isBlackFlash = false,
+                    hitDmg = A.damage;
                   if (A.name === "Divergent") {
-                    let chance = A.ultCharge / 100;
-                    if (Math.random() < chance) {
+                    if (Math.random() < A.ultCharge / 100) {
                       isBlackFlash = true;
-                      hitDmg *= 3.5; // Multiplier Black Flash
+                      hitDmg *= 3.5;
                     }
                     A.damage += 0.5;
-                  } else {
-                    A.damage += 1.0;
-                  }
-
+                  } else if (A.name === "Brawler") A.damage += 1.0;
                   let finalDmg = B.takeDamage(hitDmg, A);
                   B.iFrames = A.isUltActive ? 12 : 30;
-
                   if (A.name === "Divergent") {
                     if (isBlackFlash) {
                       spawnText("BLACK FLASH!!", B.x, B.y - 32, "#ff0033");
@@ -1703,38 +1958,33 @@
                         maxLife: 18,
                       });
                     }
-                  } else {
+                  } else
                     spawnText(
                       "-" + finalDmg.toFixed(1),
                       B.x,
                       B.y - 12,
                       "#e74c3c",
                     );
-                  }
                 }
 
                 if (
                   B.weapons === 0 &&
                   A.iFrames === 0 &&
-                  (B.name === "Brawler" || B.name === "Divergent")
+                  (B.name === "Brawler" ||
+                    B.name === "Divergent" ||
+                    B.name === "Infinity")
                 ) {
-                  let isBlackFlash = false;
-                  let hitDmg = B.damage;
-
+                  let isBlackFlash = false,
+                    hitDmg = B.damage;
                   if (B.name === "Divergent") {
-                    let chance = B.ultCharge / 100;
-                    if (Math.random() < chance) {
+                    if (Math.random() < B.ultCharge / 100) {
                       isBlackFlash = true;
                       hitDmg *= 5;
                     }
                     B.damage += 0.5;
-                  } else {
-                    B.damage += 1.0;
-                  }
-
+                  } else if (B.name === "Brawler") B.damage += 1.0;
                   let finalDmg = A.takeDamage(hitDmg, B);
                   A.iFrames = B.isUltActive ? 12 : 30;
-
                   if (B.name === "Divergent") {
                     if (isBlackFlash) {
                       spawnText("BLACK FLASH!!", A.x, A.y - 32, "#ff0033");
@@ -1766,14 +2016,13 @@
                         maxLife: 18,
                       });
                     }
-                  } else {
+                  } else
                     spawnText(
                       "-" + finalDmg.toFixed(1),
                       A.x,
                       A.y - 12,
                       "#e74c3c",
                     );
-                  }
                 }
               }
             }
@@ -1796,16 +2045,30 @@
       function getClosestPointOnSegment(p, v, w) {
         let l2 = dist2(v, w);
         if (l2 === 0) return { x: v.x, y: v.y };
-        let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
-        t = Math.max(0, Math.min(1, t));
+        let t = Math.max(
+          0,
+          Math.min(
+            1,
+            ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2,
+          ),
+        );
         return { x: v.x + t * (w.x - v.x), y: v.y + t * (w.y - v.y) };
       }
 
       function getCharSpecificStats(p) {
         let lines = [];
         lines.push(`HP: ${Math.max(0, Math.floor(p.hp))}/${p.maxHp}`);
-
         switch (p.name) {
+          case "Infinity":
+            lines.push(
+              `Mugen: ${p.mugenCD <= 0 ? "READY" : Math.ceil(p.mugenCD / 60) + "s"}`,
+            );
+            if (p.isUltActive) lines.push(`Unlimited Void: ACTIVE`);
+            else
+              lines.push(
+                `Blue: ${Math.ceil(p.blueCD / 60)}s | Red: ${Math.ceil(p.redCD / 60)}s | Purp: ${Math.ceil(p.purpleCD / 60)}s`,
+              );
+            break;
           case "Divergent":
             lines.push(`Dmg: ${p.damage.toFixed(1)}`);
             lines.push(`BF Chance: ${Math.floor(p.ultCharge)}%`);
@@ -1841,16 +2104,13 @@
                 `Target: ${p.targetToKill ? p.targetToKill.name : "Target"}`,
               );
               lines.push(`Death In: ${Math.ceil(p.deathNoteTimer / 60)}s`);
-            } else {
-              lines.push(`Status: Waiting Hit`);
-            }
+            } else lines.push(`Status: Waiting Hit`);
             break;
           case "Monkey King":
-            let cloneCount = balls.filter(
-              (b) => b.team === p.team && b.isClone,
-            ).length;
             lines.push(`Dmg: ${p.damage.toFixed(1)}`);
-            lines.push(`Clones Active: ${cloneCount}`);
+            lines.push(
+              `Clones Active: ${balls.filter((b) => b.team === p.team && b.isClone).length}`,
+            );
             break;
           case "Brawler":
             lines.push(`Hit Stack Dmg: ${p.damage.toFixed(1)}`);
@@ -1871,27 +2131,22 @@
           default:
             lines.push(`Dmg: ${p.damage.toFixed(2)}`);
         }
-
-        if (p.bonusText && p.name !== "Death Note") {
+        if (p.bonusText && p.name !== "Death Note")
           lines.push(
             `<span style="color:#00d2d3; font-weight:bold">${p.bonusText}</span>`,
           );
-        }
-
         return lines.join("<br>");
       }
 
       function updateUI() {
-        let p1 = balls.find((b) => b.team === 1 && !b.isClone);
-        let p2 = balls.find((b) => b.team === 2 && !b.isClone);
-
+        let p1 = balls.find((b) => b.team === 1 && !b.isClone),
+          p2 = balls.find((b) => b.team === 2 && !b.isClone);
         if (p1) {
           document.getElementById("barFill1").style.width =
             (p1.ultCharge / p1.ultMax) * 100 + "%";
           document.getElementById("stats1").innerHTML =
             getCharSpecificStats(p1);
         }
-
         if (p2) {
           document.getElementById("barFill2").style.width =
             (p2.ultCharge / p2.ultMax) * 100 + "%";
@@ -1903,6 +2158,13 @@
       function gameLoop() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+        let domainCaster = balls.find(
+          (b) => b.name === "Infinity" && b.isUltActive,
+        );
+        if (domainCaster) {
+          drawUnlimitedVoidBG();
+        }
+
         let stasisCaster = balls.find(
           (b) => b.name === "Stasis" && b.isUltActive,
         );
@@ -1910,25 +2172,19 @@
         if (stasisCaster && gameState === "playing") {
           ctx.fillStyle = "rgba(10, 15, 30, 0.45)";
           ctx.fillRect(0, 0, canvas.width, canvas.height);
-
           stasisCaster.stasisUltTimer--;
           stasisCaster.update();
-
           if (stasisCaster.stasisUltTimer <= 0) {
             stasisCaster.isUltActive = false;
             stasisCaster.ultCharge = 0;
             stasisCaster.bonusText = "";
-
             projectiles.forEach((p) => {
-              if (p.owner === stasisCaster) {
-                p.frozenInTime = false;
-              }
+              if (p.owner === stasisCaster) p.frozenInTime = false;
             });
           }
         } else if (gameState === "timestop") {
           ctx.fillStyle = "rgba(40, 40, 45, 0.8)";
           ctx.fillRect(0, 0, canvas.width, canvas.height);
-
           let caster = balls.find(
             (b) => b.name === "Sword Saint" && b.isUltActive,
           );
@@ -1941,7 +2197,6 @@
                 p2: { x: canvas.width + 50, y: Math.random() * canvas.height },
                 life: 20,
               });
-
               balls.forEach((b) => {
                 if (b.team !== caster.team && b.hp > 0) {
                   let finalDmg = b.takeDamage(2, caster);
@@ -1954,7 +2209,6 @@
                 }
               });
             }
-
             if (caster.timeStopTimer <= 0) {
               caster.visible = true;
               caster.isUltActive = false;
@@ -1968,40 +2222,39 @@
           checkPhysicsAndHits();
         }
 
+        for (let i = infinitySkills.length - 1; i >= 0; i--) {
+          if (gameState === "playing") infinitySkills[i].update();
+          infinitySkills[i].draw();
+          if (infinitySkills[i].life <= 0) infinitySkills.splice(i, 1);
+        }
+
         for (let i = projectiles.length - 1; i >= 0; i--) {
           let p = projectiles[i];
           if (
             gameState === "playing" ||
             (stasisCaster && p.owner === stasisCaster)
-          ) {
+          )
             p.update();
-          }
           p.draw();
           if (p.life <= 0) projectiles.splice(i, 1);
         }
 
         for (let i = balls.length - 1; i >= 0; i--) {
-          if (balls[i].hp <= 0) {
-            balls.splice(i, 1);
-          } else {
-            balls[i].draw();
-          }
+          if (balls[i].hp <= 0) balls.splice(i, 1);
+          else balls[i].draw();
         }
 
         for (let i = effects.length - 1; i >= 0; i--) {
           let ef = effects[i];
-
           if (ef.type === "cursed_energy") {
             ctx.save();
-            let progress = 1 - ef.life / ef.maxLife;
-            let radius = 15 + progress * 25;
-
+            let progress = 1 - ef.life / ef.maxLife,
+              radius = 15 + progress * 25;
             ctx.translate(ef.x, ef.y);
             ctx.beginPath();
             ctx.arc(0, 0, radius, 0, Math.PI * 2);
             ctx.fillStyle = `rgba(0, 168, 255, ${0.45 * (1 - progress)})`;
             ctx.fill();
-
             ctx.strokeStyle = `rgba(0, 210, 255, ${1 - progress})`;
             ctx.lineWidth = 3;
             for (let a = 0; a < 6; a++) {
@@ -2020,42 +2273,32 @@
             ctx.save();
             let progress = 1 - ef.life / ef.maxLife;
             ctx.translate(ef.x, ef.y);
-
             ctx.beginPath();
             ctx.arc(0, 0, 38 * (1 - progress * 0.4), 0, Math.PI * 2);
             ctx.fillStyle = `rgba(30, 0, 0, ${0.65 * (1 - progress)})`;
             ctx.fill();
-
             ctx.shadowColor = "#ff0033";
             ctx.shadowBlur = 16;
-
-            let boltCount = 8;
-            for (let b = 0; b < boltCount; b++) {
-              let angle =
-                (b * Math.PI * 2) / boltCount + Math.sin(ef.life) * 0.25;
-              let len = 42 + Math.random() * 28;
-
-              let segs = 4;
+            for (let b = 0; b < 8; b++) {
+              let angle = (b * Math.PI * 2) / 8 + Math.sin(ef.life) * 0.25,
+                len = 42 + Math.random() * 28;
               ctx.beginPath();
               ctx.moveTo(0, 0);
-
-              for (let s = 1; s <= segs; s++) {
-                let dist = (len / segs) * s;
-                let perp = (Math.random() - 0.5) * 16;
-                let nx = Math.cos(angle) * dist - Math.sin(angle) * perp;
-                let ny = Math.sin(angle) * dist + Math.cos(angle) * perp;
-                ctx.lineTo(nx, ny);
+              for (let s = 1; s <= 4; s++) {
+                let dist = (len / 4) * s,
+                  perp = (Math.random() - 0.5) * 16;
+                ctx.lineTo(
+                  Math.cos(angle) * dist - Math.sin(angle) * perp,
+                  Math.sin(angle) * dist + Math.cos(angle) * perp,
+                );
               }
-
               ctx.strokeStyle = "#ff0033";
               ctx.lineWidth = 6 * (1 - progress);
               ctx.stroke();
-
               ctx.strokeStyle = "#000000";
               ctx.lineWidth = 2.5 * (1 - progress);
               ctx.stroke();
             }
-
             ctx.restore();
             ef.life--;
           } else if (ef.type === "swordsaint_aftereffect") {
@@ -2073,28 +2316,27 @@
                   spawnText(
                     "-" + actualDmg.toFixed(1),
                     ef.target.x + (Math.random() * 24 - 12),
-                    ef.target.y - 10 + (Math.random() * 10 - 5),
+                    ef.target.y - 10,
                     "#7f8c8d",
                   );
                 }
               }
-
               ctx.save();
               ctx.translate(ef.x, ef.y);
               ctx.rotate(ef.angle);
-
               let progress = 1 - ef.life / ef.maxLife;
-
               ctx.fillStyle = `rgba(180, 185, 195, ${0.55 * (1 - progress)})`;
               for (let b = 0; b < 4; b++) {
-                let bx = Math.cos(b * 1.4) * 16 * progress;
-                let by = Math.sin(b * 1.4) * 16 * progress;
-                let br = 6 + b * 3;
                 ctx.beginPath();
-                ctx.arc(bx + 8, by - 4, br, 0, Math.PI * 2);
+                ctx.arc(
+                  Math.cos(b * 1.4) * 16 * progress + 8,
+                  Math.sin(b * 1.4) * 16 * progress - 4,
+                  6 + b * 3,
+                  0,
+                  Math.PI * 2,
+                );
                 ctx.fill();
               }
-
               ctx.strokeStyle = `rgba(90, 100, 110, ${1 - progress})`;
               ctx.lineWidth = 2.5;
               for (let l = -2; l <= 2; l++) {
@@ -2103,22 +2345,18 @@
                 ctx.lineTo(24 + Math.abs(l) * 4, l * 11);
                 ctx.stroke();
               }
-
               ctx.beginPath();
               ctx.arc(0, 0, 32, -1.3, 0.7);
               ctx.lineWidth = 11;
               ctx.strokeStyle = `rgba(45, 52, 54, ${1 - progress})`;
               ctx.lineCap = "round";
               ctx.stroke();
-
               ctx.beginPath();
               ctx.arc(0, 0, 32, -1.1, 0.5);
               ctx.lineWidth = 4;
               ctx.strokeStyle = `rgba(255, 255, 255, ${1 - progress})`;
               ctx.stroke();
-
               ctx.restore();
-
               ef.life--;
             }
           } else if (ef.type === "map_slash") {
@@ -2140,13 +2378,9 @@
             ctx.save();
             let progress = 1 - ef.life / ef.maxLife;
             ctx.translate(ef.x, ef.y);
-
-            let scale = 1.3;
-            ctx.scale(scale, scale);
-
+            ctx.scale(1.3, 1.3);
             if (progress < 0.6) {
               let offset = (1 - progress / 0.6) * 24;
-
               ctx.save();
               ctx.translate(-offset, 0);
               ctx.fillStyle = "#e74c3c";
@@ -2157,7 +2391,6 @@
               ctx.closePath();
               ctx.fill();
               ctx.restore();
-
               ctx.save();
               ctx.translate(offset, 0);
               ctx.fillStyle = "#e74c3c";
@@ -2168,12 +2401,6 @@
               ctx.closePath();
               ctx.fill();
               ctx.restore();
-
-              ctx.fillStyle = "#ff7675";
-              ctx.fillRect(-offset - 7, -14, 3, 3);
-              ctx.fillRect(offset + 5, -14, 3, 3);
-              ctx.fillRect(-offset - 5, 8, 2, 2);
-              ctx.fillRect(offset + 4, 8, 2, 2);
             } else {
               let pulse = Math.sin((progress - 0.6) * 12) * 0.25 + 1;
               ctx.scale(pulse, pulse);
@@ -2187,7 +2414,6 @@
               ctx.bezierCurveTo(16, -10, 14, 2, 0, 12);
               ctx.fill();
             }
-
             ctx.restore();
             ef.life--;
           } else {
@@ -2197,23 +2423,19 @@
             ctx.fillText(ef.text, ef.x, ef.y - (30 - ef.life));
             ef.life--;
           }
-
           if (ef.life <= 0) effects.splice(i, 1);
         }
 
         updateUI();
-
         if (gameState === "playing") {
           let team1Alive = balls.some((b) => b.team === 1);
           let team2Alive = balls.some((b) => b.team === 2);
-
           if (!team1Alive || !team2Alive) {
             gameState = "over";
             let winner = team1Alive ? p1Choice : p2Choice;
             showWinnerOverlay(winner);
           }
         }
-
         requestAnimationFrame(gameLoop);
       }
 
@@ -2232,6 +2454,7 @@
         p1Choice = null;
         p2Choice = null;
         projectiles = [];
+        infinitySkills = [];
         gameState = "menu";
       }
 
@@ -2269,6 +2492,7 @@
 
         balls = [];
         projectiles = [];
+        infinitySkills = [];
         balls.push(
           new Ball(1, p1Choice, canvas.width * 0.25, canvas.height / 2),
         );
