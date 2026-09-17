@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Auto-Battler Arena - Echoes Update</title>
+    <title>Auto-Battler Arena - Antimagic Update</title>
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Teko:wght@600&display=swap");
 
@@ -261,6 +261,20 @@
       monkeyStaffImg.src = "assets/pixil-frame-0.png";
 
       const characterDB = {
+        Antimagic: {
+          color: "#1c1c1c",
+          hp: 100,
+          damage: 5,
+          speed: 2.6,
+          weapons: 1,
+          wLen: 75,
+          wWidth: 16,
+          rotSpeed: 0.02,
+          ultName: "BLACK METEORITE",
+          ultColor: "#c0392b",
+          desc: "Spell Erase, Ult Drain & Black Form",
+          ultMax: 2500,
+        },
         Echoes: {
           color: "#2ecc71",
           hp: 100,
@@ -625,7 +639,6 @@
               target.team !== this.owner.team &&
               target.hp > 0
             ) {
-              // PERBAIKAN BUG: Tambahkan pengecekan jarak collision agar kunai tidak sure hit dari jauh
               let dist = Math.hypot(target.x - this.x, target.y - this.y);
               if (dist < target.radius + 10 && !this.hitTargets.has(target)) {
                 let finalDmg = target.takeDamage(this.damage, this.owner, true);
@@ -1056,6 +1069,43 @@
         draw() {
           if (!this.visible) return;
 
+          if (this.name === "Antimagic") {
+            ctx.save();
+            ctx.beginPath();
+            let pulse = Math.sin(Date.now() * 0.01) * 4;
+            ctx.arc(this.x, this.y, this.radius + 8 + pulse, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(192, 57, 43, 0.25)";
+            ctx.fill();
+            ctx.strokeStyle = this.isUltActive ? "#ff0000" : "#c0392b";
+            ctx.lineWidth = this.isUltActive ? 3.5 : 2;
+            ctx.shadowColor = "#e74c3c";
+            ctx.shadowBlur = 12;
+            ctx.stroke();
+
+            if (this.isUltActive) {
+              ctx.fillStyle = "#111111";
+              ctx.beginPath();
+              ctx.moveTo(this.x - 15, this.y - 10);
+              ctx.quadraticCurveTo(
+                this.x - 45,
+                this.y - 45,
+                this.x - 55,
+                this.y - 20,
+              );
+              ctx.quadraticCurveTo(
+                this.x - 35,
+                this.y - 15,
+                this.x - 15,
+                this.y + 5,
+              );
+              ctx.fill();
+              ctx.strokeStyle = "#e74c3c";
+              ctx.lineWidth = 1.5;
+              ctx.stroke();
+            }
+            ctx.restore();
+          }
+
           if (this.name === "Infinity") {
             ctx.save();
             ctx.beginPath();
@@ -1283,6 +1333,8 @@
               ctx.lineTo(seg.p2.x, seg.p2.y);
               ctx.lineWidth = this.wWidth;
               ctx.strokeStyle = this.isUltActive ? "#f1c40f" : "#444";
+              if (this.name === "Antimagic")
+                ctx.strokeStyle = this.isUltActive ? "#e74c3c" : "#1e1e1e";
               if (this.name === "Illustrade") ctx.strokeStyle = "#362F4F";
               if (this.name === "Vessel") ctx.strokeStyle = "#8b0000";
               if (this.name === "Valkyrie") ctx.strokeStyle = "#87ceeb";
@@ -1301,7 +1353,10 @@
           if (this.iFrames > 0 && Math.floor(this.iFrames / 3) % 2 === 0)
             ctx.fillStyle = "#ffaaaa";
           else
-            ctx.fillStyle = this.name === "Death Note" ? "#111111" : "#ffffff";
+            ctx.fillStyle =
+              this.name === "Death Note" || this.name === "Antimagic"
+                ? "#111111"
+                : "#ffffff";
 
           ctx.beginPath();
           ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
@@ -1309,7 +1364,10 @@
           ctx.lineWidth = 4;
           ctx.strokeStyle = this.color;
           ctx.stroke();
-          ctx.fillStyle = this.name === "Death Note" ? "#ffffff" : "#000000";
+          ctx.fillStyle =
+            this.name === "Death Note" || this.name === "Antimagic"
+              ? "#ffffff"
+              : "#000000";
           ctx.font = `bold ${this.isClone ? 12 : 20}px Arial`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
@@ -1334,6 +1392,120 @@
         }
 
         update() {
+          if (this.name === "Antimagic") {
+            this.stunTimer = 0;
+            this.domainDebuffTimer = 0;
+
+            // Ambil segmen pedang Antimagic
+            let weaponSegs = this.getWeaponSegments();
+
+            // 1. Cek jika Proyektil (misal Kunai Stasis) kena TEBAS pedang
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+              let p = projectiles[i];
+              if (p.owner && p.owner.team !== this.team) {
+                let hitBySword = false;
+                for (let seg of weaponSegs) {
+                  let cp = getClosestPointOnSegment(
+                    { x: p.x, y: p.y },
+                    seg.p1,
+                    seg.p2,
+                  );
+                  let dist = Math.hypot(p.x - cp.x, p.y - cp.y);
+                  // Jarak dari pedang ke proyektil (lebar pedang + toleransi)
+                  if (dist < 15 + this.wWidth / 2) {
+                    hitBySword = true;
+                    break;
+                  }
+                }
+                if (hitBySword) {
+                  p.life = 0; // Proyektil hancur karena ditebas
+                  spawnText("ERASED!", p.x, p.y - 10, "#e74c3c");
+                  effects.push({
+                    type: "black_flash",
+                    x: p.x,
+                    y: p.y,
+                    life: 10,
+                    maxLife: 10,
+                  });
+                }
+              }
+            }
+
+            // 2. Cek jika Sound Trap (Echoes) kena TEBAS pedang
+            for (let i = soundTraps.length - 1; i >= 0; i--) {
+              let st = soundTraps[i];
+              if (st.owner && st.owner.team !== this.team) {
+                let hitBySword = false;
+                for (let seg of weaponSegs) {
+                  let cp = getClosestPointOnSegment(
+                    { x: st.x, y: st.y },
+                    seg.p1,
+                    seg.p2,
+                  );
+                  let dist = Math.hypot(st.x - cp.x, st.y - cp.y);
+                  if (dist < st.radius + this.wWidth / 2) {
+                    hitBySword = true;
+                    break;
+                  }
+                }
+                if (hitBySword) {
+                  soundTraps.splice(i, 1); // Trap hancur karena ditebas
+                  spawnText("SPELL DISPELLED!", st.x, st.y - 10, "#e74c3c");
+                }
+              }
+            }
+
+            // 3. Cek jika Skill Infinity (Lapse Blue / Red Wave) kena TEBAS pedang
+            for (let i = infinitySkills.length - 1; i >= 0; i--) {
+              let sk = infinitySkills[i];
+              if (sk.owner && sk.owner.team !== this.team) {
+                let hitBySword = false;
+                for (let seg of weaponSegs) {
+                  let cp = getClosestPointOnSegment(
+                    { x: sk.x, y: sk.y },
+                    seg.p1,
+                    seg.p2,
+                  );
+                  let dist = Math.hypot(sk.x - cp.x, sk.y - cp.y);
+                  let skillRadius = sk.radius || 15;
+                  if (dist < skillRadius + this.wWidth / 2) {
+                    hitBySword = true;
+                    break;
+                  }
+                }
+                if (hitBySword) {
+                  infinitySkills.splice(i, 1); // Skill hancur karena ditebas
+                  spawnText("MAGIC NULLIFIED!", this.x, this.y - 20, "#e74c3c");
+                }
+              }
+            }
+
+            if (this.isUltActive) {
+              let enemy = balls.find((b) => b.team !== this.team && b.hp > 0);
+              if (enemy) {
+                let dx = enemy.x - this.x,
+                  dy = enemy.y - this.y;
+                let dist = Math.hypot(dx, dy) || 1;
+
+                // Hanya menambah dorongan kejar jika belum mengenai musuh.
+                // Jika sudah mengenai musuh, biarkan efek memantul bekerja (tidak "nempel")
+                if (dist > this.radius + enemy.radius + 12) {
+                  this.vx += (dx / dist) * 0.8;
+                  this.vy += (dy / dist) * 0.8;
+
+                  // Batasi kecepatan mengejar agar tetap wajar (maks 5.5)
+                  let speed = Math.hypot(this.vx, this.vy);
+                  if (speed > 5.5) {
+                    this.vx = (this.vx / speed) * 5.5;
+                    this.vy = (this.vy / speed) * 5.5;
+                  }
+                }
+
+                this.rotSpeed = 0.25;
+              }
+            }
+          }
+
           if (this.stunTimer > 0) {
             this.stunTimer--;
             this.vx = 0;
@@ -1652,7 +1824,8 @@
             !this.isUltActive ||
             (this.name !== "Brawler" &&
               this.name !== "Illustrade" &&
-              this.name !== "Retaliator")
+              this.name !== "Retaliator" &&
+              this.name !== "Antimagic")
           ) {
             if (currentSpeed > targetSpeed) {
               this.vx *= 0.92;
@@ -1704,7 +1877,16 @@
           }
           this.ultCharge = 0;
 
-          if (this.name === "Echoes") {
+          if (this.name === "Antimagic") {
+            this.bonusText = "BLACK METEORITE!";
+            this.wLen = this.baseWLen * 1.5;
+            this.damage = characterDB["Antimagic"].damage * 2;
+            projectiles = projectiles.filter((p) => {
+              if (p.owner && p.owner.team === this.team) return true; // Simpan proyektil tim sendiri
+              return Math.random() >= 0.5; // 50% peluang proyektil musuh selamat/tidak hancur
+            });
+            spawnText("ANTI-MAGIC SURGE!", this.x, this.y - 30, "#e74c3c");
+          } else if (this.name === "Echoes") {
             this.bonusText = "NOISE OVERLOAD!";
             let enemy =
               balls.find(
@@ -1792,13 +1974,22 @@
             this.name !== "Infinity" &&
             this.name !== "Echoes"
           ) {
-            let ultDuration = this.name === "Brawler" ? 1000 : 5000;
+            let ultDuration =
+              this.name === "Brawler"
+                ? 1000
+                : this.name === "Antimagic"
+                  ? 2000
+                  : 5000;
             setTimeout(() => {
               this.isUltActive = false;
               this.ultCharge = 0;
               this.bonusText = "";
               this.radius = this.baseRadius;
               this.wLen = this.baseWLen;
+              if (this.name === "Antimagic") {
+                this.damage = characterDB["Antimagic"].damage;
+                this.rotSpeed = characterDB["Antimagic"].rotSpeed;
+              }
               if (this.name === "Retaliator" || this.name === "Brawler") {
                 let ang = Math.random() * Math.PI * 2;
                 this.vx = Math.cos(ang) * this.baseSpeed;
@@ -1966,6 +2157,18 @@
                     let finalDmg = B.takeDamage(A.damage, A);
                     B.iFrames = 60;
 
+                    if (A.name === "Antimagic") {
+                      B.ultCharge = Math.max(0, B.ultCharge - 200); // Diubah dari 300 menjadi 100
+                      spawnText("ULT ERASED (-100)!", B.x, B.y - 25, "#e74c3c");
+                      effects.push({
+                        type: "black_flash",
+                        x: B.x,
+                        y: B.y,
+                        life: 15,
+                        maxLife: 15,
+                      });
+                    }
+
                     if (A.name === "Monkey King" && A.staffData) {
                       if (A.staffData.scale < 3.0) {
                         A.staffData.scale = Math.min(
@@ -2038,6 +2241,18 @@
                     B.rotSpeed *= -1;
                     let finalDmg = A.takeDamage(B.damage, B);
                     A.iFrames = 60;
+
+                    if (B.name === "Antimagic") {
+                      A.ultCharge = Math.max(0, A.ultCharge - 200);
+                      spawnText("ULT ERASED (-300)!", A.x, A.y - 25, "#e74c3c");
+                      effects.push({
+                        type: "black_flash",
+                        x: A.x,
+                        y: A.y,
+                        life: 15,
+                        maxLife: 15,
+                      });
+                    }
 
                     if (B.name === "Monkey King" && B.staffData) {
                       if (B.staffData.scale < 3.0) {
@@ -2254,6 +2469,11 @@
         let lines = [];
         lines.push(`HP: ${Math.max(0, Math.floor(p.hp))}/${p.maxHp}`);
         switch (p.name) {
+          case "Antimagic":
+            lines.push(`Demon Blade Dmg: ${p.damage.toFixed(1)}`);
+            lines.push(`Anti-Magic: Proj Immune`);
+            lines.push(`Status: ${p.isUltActive ? "BLACK FORM" : "Ready"}`);
+            break;
           case "Echoes":
             let myTrapCount = soundTraps.filter((t) => t.owner === p).length;
             lines.push(`Body Dmg: ${p.damage.toFixed(1)}`);
