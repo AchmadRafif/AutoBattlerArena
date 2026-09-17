@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Auto-Battler Arena - Vessel Revamp</title>
+    <title>Auto-Battler Arena - Divergent Update</title>
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Teko:wght@600&display=swap");
 
@@ -180,12 +180,12 @@
         background: #2c3e50;
         border: 2px solid #ecf0f1;
         color: white;
-        padding: 8px 18px;
-        margin: 4px;
-        font-size: 20px;
+        padding: 6px 16px;
+        margin: 3px;
+        font-size: 19px;
         font-family: "Teko", sans-serif;
         cursor: pointer;
-        width: 340px;
+        width: 350px;
         border-radius: 6px;
         transition: 0.15s;
         text-align: left;
@@ -193,18 +193,18 @@
 
       .char-btn:hover {
         background: #e74c3c;
-        transform: scale(1.03);
+        transform: scale(1.02);
       }
 
       #selection-title {
-        font-size: 32px;
-        margin-bottom: 15px;
+        font-size: 30px;
+        margin-bottom: 10px;
         text-shadow: 2px 2px 0 #000;
         color: #f1c40f;
       }
 
       .char-desc {
-        font-size: 13px;
+        font-size: 12px;
         font-family: Arial, sans-serif;
         color: #bdc3c7;
         display: block;
@@ -345,6 +345,20 @@
           ultColor: "#2ecc71",
           desc: "TIDAK ADA SENJATA. Pasif: +1 Dmg/hit. Ult: Mengorbit 1s (CD 30s)!",
           ultMax: 1800,
+        },
+        Divergent: {
+          color: "#e74c3c",
+          hp: 100,
+          damage: 2.0,
+          speed: 3.0,
+          weapons: 0,
+          wLen: 0,
+          wWidth: 0,
+          rotSpeed: 0,
+          ultName: "BLACK FLASH",
+          ultColor: "#ff0033",
+          desc: "Based on Itadori Yuji.",
+          ultMax: 100,
         },
         "Sword Saint": {
           color: "#34495e",
@@ -626,6 +640,10 @@
           this.illustradeChargeTimer = 0;
           this.floatingChars = [];
           this.spellCircleAngle = 0;
+
+          // Variabel Pasif Divergent (Dibuat Lebih Lambat)
+          this.bfTarget = Math.random() * 100;
+          this.bfSpeed = 0.4; // Kecepatan dasar diperlambat
         }
 
         takeDamage(amount, attacker = null) {
@@ -761,6 +779,27 @@
 
         draw() {
           if (!this.visible) return;
+
+          // Aura Energi Terkutuk untuk Divergent
+          if (this.name === "Divergent") {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(
+              this.x,
+              this.y,
+              this.radius + 6 + Math.sin(Date.now() * 0.01) * 3,
+              0,
+              Math.PI * 2,
+            );
+            ctx.fillStyle = "rgba(0, 168, 255, 0.25)";
+            ctx.fill();
+            ctx.shadowColor = "#00a8ff";
+            ctx.shadowBlur = 12;
+            ctx.strokeStyle = "rgba(0, 168, 255, 0.7)";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.restore();
+          }
 
           if (this.pencilTrails.length > 1) {
             ctx.save();
@@ -930,11 +969,10 @@
             ctx.setLineDash([]);
           }
 
-          // Rendering Senjata Karakter
           if (this.name === "Monkey King") {
             ctx.save();
             ctx.translate(this.x, this.y);
-            ctx.rotate(this.angle - Math.PI / 4); // Rotasi menyesuaikan kemiringan sprite 45 derajat
+            ctx.rotate(this.angle - Math.PI / 4);
             let totalLen = (this.radius + this.wLen) * 2;
 
             if (monkeyStaffImg.complete && monkeyStaffImg.naturalWidth !== 0) {
@@ -946,7 +984,6 @@
                 totalLen,
               );
             } else {
-              // Fallback jika aset belum termuat
               let segs = this.getWeaponSegments();
               segs.forEach((seg) => {
                 ctx.beginPath();
@@ -1004,6 +1041,19 @@
         }
 
         update() {
+          // Logika Fluktuasi Bar Pasif Divergent (Diperhalus & Diperlambat)
+          if (this.name === "Divergent") {
+            if (Math.abs(this.ultCharge - this.bfTarget) < 2) {
+              this.bfTarget = Math.random() * 100;
+              this.bfSpeed = 0.2 + Math.random() * 0.6; // Kecepatan gerak lebih santai (0.2 - 0.8 per frame)
+            }
+            if (this.ultCharge < this.bfTarget) {
+              this.ultCharge = Math.min(100, this.ultCharge + this.bfSpeed);
+            } else {
+              this.ultCharge = Math.max(0, this.ultCharge - this.bfSpeed);
+            }
+          }
+
           if (this.name === "Retaliator") {
             if (this.combatTimer > 0) {
               this.combatTimer--;
@@ -1274,7 +1324,8 @@
             gameState === "playing" &&
             !this.isClone &&
             !this.isUltActive &&
-            this.name !== "Death Note"
+            this.name !== "Death Note" &&
+            this.name !== "Divergent"
           ) {
             this.ultCharge = Math.min(this.ultMax, this.ultCharge + 1);
             if (this.ultCharge >= this.ultMax) this.activateUlt();
@@ -1598,40 +1649,130 @@
               B.vy = tempVy;
 
               if (isEnemy) {
+                // Serangan Fisik Karakter Tanpa Senjata (Brawler & Divergent)
                 if (
                   A.weapons === 0 &&
                   B.iFrames === 0 &&
-                  A.name === "Brawler"
+                  (A.name === "Brawler" || A.name === "Divergent")
                 ) {
-                  let finalDmg = B.takeDamage(A.damage, A);
-                  B.iFrames = A.isUltActive ? 12 : 30;
-                  spawnText(
-                    "-" + finalDmg.toFixed(1),
-                    B.x,
-                    B.y - 12,
-                    "#e74c3c",
-                  );
+                  let isBlackFlash = false;
+                  let hitDmg = A.damage;
 
-                  if (!A.isUltActive) {
+                  if (A.name === "Divergent") {
+                    let chance = A.ultCharge / 100;
+                    if (Math.random() < chance) {
+                      isBlackFlash = true;
+                      hitDmg *= 3.5; // Multiplier Black Flash
+                    }
+                    A.damage += 0.5;
+                  } else {
                     A.damage += 1.0;
                   }
+
+                  let finalDmg = B.takeDamage(hitDmg, A);
+                  B.iFrames = A.isUltActive ? 12 : 30;
+
+                  if (A.name === "Divergent") {
+                    if (isBlackFlash) {
+                      spawnText("BLACK FLASH!!", B.x, B.y - 32, "#ff0033");
+                      spawnText(
+                        "-" + finalDmg.toFixed(1),
+                        B.x,
+                        B.y - 12,
+                        "#ff0033",
+                      );
+                      effects.push({
+                        type: "black_flash",
+                        x: (A.x + B.x) / 2,
+                        y: (A.y + B.y) / 2,
+                        life: 25,
+                        maxLife: 25,
+                      });
+                    } else {
+                      spawnText(
+                        "-" + finalDmg.toFixed(1),
+                        B.x,
+                        B.y - 12,
+                        "#00a8ff",
+                      );
+                      effects.push({
+                        type: "cursed_energy",
+                        x: (A.x + B.x) / 2,
+                        y: (A.y + B.y) / 2,
+                        life: 18,
+                        maxLife: 18,
+                      });
+                    }
+                  } else {
+                    spawnText(
+                      "-" + finalDmg.toFixed(1),
+                      B.x,
+                      B.y - 12,
+                      "#e74c3c",
+                    );
+                  }
                 }
+
                 if (
                   B.weapons === 0 &&
                   A.iFrames === 0 &&
-                  B.name === "Brawler"
+                  (B.name === "Brawler" || B.name === "Divergent")
                 ) {
-                  let finalDmg = A.takeDamage(B.damage, B);
-                  A.iFrames = B.isUltActive ? 12 : 30;
-                  spawnText(
-                    "-" + finalDmg.toFixed(1),
-                    A.x,
-                    A.y - 12,
-                    "#e74c3c",
-                  );
+                  let isBlackFlash = false;
+                  let hitDmg = B.damage;
 
-                  if (!B.isUltActive) {
+                  if (B.name === "Divergent") {
+                    let chance = B.ultCharge / 100;
+                    if (Math.random() < chance) {
+                      isBlackFlash = true;
+                      hitDmg *= 5;
+                    }
+                    B.damage += 0.5;
+                  } else {
                     B.damage += 1.0;
+                  }
+
+                  let finalDmg = A.takeDamage(hitDmg, B);
+                  A.iFrames = B.isUltActive ? 12 : 30;
+
+                  if (B.name === "Divergent") {
+                    if (isBlackFlash) {
+                      spawnText("BLACK FLASH!!", A.x, A.y - 32, "#ff0033");
+                      spawnText(
+                        "-" + finalDmg.toFixed(1),
+                        A.x,
+                        A.y - 12,
+                        "#ff0033",
+                      );
+                      effects.push({
+                        type: "black_flash",
+                        x: (A.x + B.x) / 2,
+                        y: (A.y + B.y) / 2,
+                        life: 25,
+                        maxLife: 25,
+                      });
+                    } else {
+                      spawnText(
+                        "-" + finalDmg.toFixed(1),
+                        A.x,
+                        A.y - 12,
+                        "#00a8ff",
+                      );
+                      effects.push({
+                        type: "cursed_energy",
+                        x: (A.x + B.x) / 2,
+                        y: (A.y + B.y) / 2,
+                        life: 18,
+                        maxLife: 18,
+                      });
+                    }
+                  } else {
+                    spawnText(
+                      "-" + finalDmg.toFixed(1),
+                      A.x,
+                      A.y - 12,
+                      "#e74c3c",
+                    );
                   }
                 }
               }
@@ -1660,12 +1801,15 @@
         return { x: v.x + t * (w.x - v.x), y: v.y + t * (w.y - v.y) };
       }
 
-      // Format Indikator Unik Spesifik Setiap Karakter
       function getCharSpecificStats(p) {
         let lines = [];
         lines.push(`HP: ${Math.max(0, Math.floor(p.hp))}/${p.maxHp}`);
 
         switch (p.name) {
+          case "Divergent":
+            lines.push(`Dmg: ${p.damage.toFixed(1)}`);
+            lines.push(`BF Chance: ${Math.floor(p.ultCharge)}%`);
+            break;
           case "Sword Saint":
             lines.push(`Atk Spd: ${p.atkSpeed.toFixed(1)}x`);
             lines.push(`Dmg: ${p.damage.toFixed(2)}`);
@@ -1674,13 +1818,13 @@
             let effSpd = p.isUltActive ? p.atkSpeed * 3 : p.atkSpeed;
             lines.push(`Atk Spd: ${effSpd.toFixed(2)}x`);
             lines.push(
-              `Rate: ${(60 / Math.max(4, 60 / effSpd)).toFixed(1)} kunai/s`,
+              `Rate: ${(60 / Math.max(4, 60 / effSpd)).toFixed(1)} /s`,
             );
             break;
           case "Retaliator":
             lines.push(`Retaliate Dmg: ${p.damage.toFixed(1)}`);
             lines.push(
-              `Status: ${p.combatTimer > 0 ? "In Combat" : "Retaliate "}`,
+              `Status: ${p.combatTimer > 0 ? "In Combat" : "Retaliating"}`,
             );
             break;
           case "Vessel":
@@ -1847,7 +1991,74 @@
         for (let i = effects.length - 1; i >= 0; i--) {
           let ef = effects[i];
 
-          if (ef.type === "swordsaint_aftereffect") {
+          if (ef.type === "cursed_energy") {
+            ctx.save();
+            let progress = 1 - ef.life / ef.maxLife;
+            let radius = 15 + progress * 25;
+
+            ctx.translate(ef.x, ef.y);
+            ctx.beginPath();
+            ctx.arc(0, 0, radius, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(0, 168, 255, ${0.45 * (1 - progress)})`;
+            ctx.fill();
+
+            ctx.strokeStyle = `rgba(0, 210, 255, ${1 - progress})`;
+            ctx.lineWidth = 3;
+            for (let a = 0; a < 6; a++) {
+              let ang = (a * Math.PI) / 3 + progress * 2;
+              ctx.beginPath();
+              ctx.moveTo(Math.cos(ang) * 5, Math.sin(ang) * 5);
+              ctx.lineTo(
+                Math.cos(ang) * (radius + 5),
+                Math.sin(ang) * (radius + 5),
+              );
+              ctx.stroke();
+            }
+            ctx.restore();
+            ef.life--;
+          } else if (ef.type === "black_flash") {
+            ctx.save();
+            let progress = 1 - ef.life / ef.maxLife;
+            ctx.translate(ef.x, ef.y);
+
+            ctx.beginPath();
+            ctx.arc(0, 0, 38 * (1 - progress * 0.4), 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(30, 0, 0, ${0.65 * (1 - progress)})`;
+            ctx.fill();
+
+            ctx.shadowColor = "#ff0033";
+            ctx.shadowBlur = 16;
+
+            let boltCount = 8;
+            for (let b = 0; b < boltCount; b++) {
+              let angle =
+                (b * Math.PI * 2) / boltCount + Math.sin(ef.life) * 0.25;
+              let len = 42 + Math.random() * 28;
+
+              let segs = 4;
+              ctx.beginPath();
+              ctx.moveTo(0, 0);
+
+              for (let s = 1; s <= segs; s++) {
+                let dist = (len / segs) * s;
+                let perp = (Math.random() - 0.5) * 16;
+                let nx = Math.cos(angle) * dist - Math.sin(angle) * perp;
+                let ny = Math.sin(angle) * dist + Math.cos(angle) * perp;
+                ctx.lineTo(nx, ny);
+              }
+
+              ctx.strokeStyle = "#ff0033";
+              ctx.lineWidth = 6 * (1 - progress);
+              ctx.stroke();
+
+              ctx.strokeStyle = "#000000";
+              ctx.lineWidth = 2.5 * (1 - progress);
+              ctx.stroke();
+            }
+
+            ctx.restore();
+            ef.life--;
+          } else if (ef.type === "swordsaint_aftereffect") {
             if (ef.delay > 0) {
               ef.delay--;
               if (ef.target && ef.target.hp > 0) {
