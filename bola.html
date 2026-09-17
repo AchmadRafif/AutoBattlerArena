@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Auto-Battler Arena - Infinity Update</title>
+    <title>Auto-Battler Arena - Monkey King Revamp</title>
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Teko:wght@600&display=swap");
 
@@ -320,15 +320,15 @@
         "Monkey King": {
           color: "#f1c40f",
           hp: 100,
-          damage: 1.5,
+          damage: 2.0,
           speed: 2.6,
-          weapons: 2,
-          wLen: 70,
-          wWidth: 8,
+          weapons: 1,
+          wLen: 65,
+          wWidth: 10,
           rotSpeed: 0.016,
           ultName: "TRICKSTER CLONE",
           ultColor: "#f1c40f",
-          desc: "Cloner, RuyiStaff",
+          desc: "Growing Staff & Clones",
           ultMax: 350,
         },
         Brawler: {
@@ -692,7 +692,6 @@
         }
       }
 
-      // --- PERBAIKAN PADA HOLLOW PURPLE ---
       class PurpleBeam {
         constructor(x, y, target, owner, isBoosted) {
           this.x = x;
@@ -723,8 +722,6 @@
                 if (dist < 40) {
                   let multiplier = this.isBoosted ? 1.5 : 1.0;
                   let trueDamage = 5.0 * multiplier;
-
-                  // MENGGUNAKAN takeDamage BIAR TERBACA OLEH PASIF VESSEL
                   let actualDmg = b.takeDamage(trueDamage, this.owner);
                   spawnText(
                     "PURPLE: -" + actualDmg.toFixed(1),
@@ -777,6 +774,10 @@
           this.baseRotSpeed = stats.rotSpeed;
           this.rotSpeed = stats.rotSpeed;
           this.damage = stats.damage;
+
+          if (this.name === "Monkey King") {
+            this.staffData = { scale: 1.0 };
+          }
 
           this.atkSpeed = 1.0;
           this.ultCharge = 0;
@@ -842,7 +843,6 @@
             spawnText("+0.5 DMG!", this.x, this.y - 25, "#c0392b");
           }
 
-          // PASIF VESSEL "BUT IT REFUSED!"
           if (
             this.name === "Vessel" &&
             this.hp - actualDamage <= 0 &&
@@ -924,13 +924,24 @@
         getWeaponSegments() {
           let segs = [];
           if (this.weapons === 0) return segs;
+
+          if (this.name === "Monkey King") {
+            let scale = this.staffData ? this.staffData.scale : 1.0;
+            let currentHalfLen = (this.radius + this.wLen) * scale;
+            let ang = this.angle;
+            let startX = this.x - Math.cos(ang) * currentHalfLen;
+            let startY = this.y - Math.sin(ang) * currentHalfLen;
+            let endX = this.x + Math.cos(ang) * currentHalfLen;
+            let endY = this.y + Math.sin(ang) * currentHalfLen;
+            segs.push({
+              p1: { x: startX, y: startY },
+              p2: { x: endX, y: endY },
+            });
+            return segs;
+          }
+
           for (let i = 0; i < this.weapons; i++) {
-            let ang =
-              this.angle +
-              (this.name === "Monkey King"
-                ? Math.PI
-                : (Math.PI * 2) / this.weapons) *
-                i;
+            let ang = this.angle + ((Math.PI * 2) / this.weapons) * i;
             let startX = this.x + Math.cos(ang) * this.radius;
             let startY = this.y + Math.sin(ang) * this.radius;
             let endX = this.x + Math.cos(ang) * (this.radius + this.wLen);
@@ -1142,8 +1153,9 @@
             ctx.save();
             ctx.translate(this.x, this.y);
             ctx.rotate(this.angle - Math.PI / 4);
-            let totalLen = (this.radius + this.wLen) * 2;
-            if (monkeyStaffImg.complete && monkeyStaffImg.naturalWidth !== 0)
+            let scale = this.staffData ? this.staffData.scale : 1.0;
+            let totalLen = (this.radius + this.wLen) * 2 * scale;
+            if (monkeyStaffImg.complete && monkeyStaffImg.naturalWidth !== 0) {
               ctx.drawImage(
                 monkeyStaffImg,
                 -totalLen / 2,
@@ -1151,13 +1163,13 @@
                 totalLen,
                 totalLen,
               );
-            else {
+            } else {
               let segs = this.getWeaponSegments();
               segs.forEach((seg) => {
                 ctx.beginPath();
                 ctx.moveTo(seg.p1.x - this.x, seg.p1.y - this.y);
                 ctx.lineTo(seg.p2.x - this.x, seg.p2.y - this.y);
-                ctx.lineWidth = this.wWidth;
+                ctx.lineWidth = this.wWidth * scale;
                 ctx.strokeStyle = "#f1c40f";
                 ctx.lineCap = "round";
                 ctx.stroke();
@@ -1604,6 +1616,7 @@
                 this.y,
                 true,
               );
+              clone.staffData = this.staffData;
               let ang = Math.random() * Math.PI * 2;
               clone.vx = Math.cos(ang) * clone.baseSpeed;
               clone.vy = Math.sin(ang) * clone.baseSpeed;
@@ -1798,6 +1811,20 @@
                     A.rotSpeed *= -1;
                     let finalDmg = B.takeDamage(A.damage, A);
                     B.iFrames = 60;
+
+                    // MONKEY KING STAFF GROW CAP AT 3X
+                    if (A.name === "Monkey King" && A.staffData) {
+                      if (A.staffData.scale < 3.0) {
+                        A.staffData.scale = Math.min(
+                          3.0,
+                          A.staffData.scale + 0.12,
+                        );
+                        spawnText("+STAFF GROW!", A.x, A.y - 25, "#f1c40f");
+                      } else {
+                        spawnText("MAX SIZE (3X)!", A.x, A.y - 25, "#f1c40f");
+                      }
+                    }
+
                     if (A.name === "Vessel") {
                       A.damage += 0.5;
                       A.ultCharge = Math.min(A.ultMax, A.ultCharge + 50);
@@ -1858,6 +1885,20 @@
                     B.rotSpeed *= -1;
                     let finalDmg = A.takeDamage(B.damage, B);
                     A.iFrames = 60;
+
+                    // MONKEY KING STAFF GROW CAP AT 3X
+                    if (B.name === "Monkey King" && B.staffData) {
+                      if (B.staffData.scale < 3.0) {
+                        B.staffData.scale = Math.min(
+                          3.0,
+                          B.staffData.scale + 0.12,
+                        );
+                        spawnText("+STAFF GROW!", B.x, B.y - 25, "#f1c40f");
+                      } else {
+                        spawnText("MAX SIZE (3X)!", B.x, B.y - 25, "#f1c40f");
+                      }
+                    }
+
                     if (B.name === "Vessel") {
                       B.damage += 0.5;
                       B.ultCharge = Math.min(B.ultMax, B.ultCharge + 50);
@@ -2108,6 +2149,9 @@
             break;
           case "Monkey King":
             lines.push(`Dmg: ${p.damage.toFixed(1)}`);
+            lines.push(
+              `Staff Size: ${p.staffData ? p.staffData.scale.toFixed(2) : "1.00"}x / 3.00x`,
+            );
             lines.push(
               `Clones Active: ${balls.filter((b) => b.team === p.team && b.isClone).length}`,
             );
