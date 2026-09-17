@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Auto-Battler Arena - Monkey King Revamp</title>
+    <title>Auto-Battler Arena - Echoes Update</title>
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Teko:wght@600&display=swap");
 
@@ -261,6 +261,20 @@
       monkeyStaffImg.src = "assets/pixil-frame-0.png";
 
       const characterDB = {
+        Echoes: {
+          color: "#2ecc71",
+          hp: 100,
+          damage: 0.8,
+          speed: 2.7,
+          weapons: 0,
+          wLen: 0,
+          wWidth: 0,
+          rotSpeed: 0,
+          ultName: "NOISE OVERLOAD",
+          ultColor: "#27ae60",
+          desc: "Sound Mark Traps & Chain Detonation",
+          ultMax: 1600,
+        },
         Illustrade: {
           color: "#362F4F",
           hp: 100,
@@ -332,7 +346,7 @@
           ultMax: 350,
         },
         Brawler: {
-          color: "#2ecc71",
+          color: "#F11A7B",
           hp: 100,
           damage: 2.0,
           speed: 3.0,
@@ -341,7 +355,7 @@
           wWidth: 0,
           rotSpeed: 0,
           ultName: "GRAVITY ORBIT",
-          ultColor: "#2ecc71",
+          ultColor: "#F11A7B",
           desc: "Handler, AldiGagah",
           ultMax: 1800,
         },
@@ -438,6 +452,97 @@
       let p2Choice = null;
       let effects = [];
       let infinitySkills = [];
+      let soundTraps = [];
+
+      class SoundTrap {
+        constructor(x, y, type, owner) {
+          this.x = x;
+          this.y = y;
+          this.type = type; // BOING, HEAT, DOKAN
+          this.owner = owner;
+          this.life = 600;
+          this.radius = 22;
+        }
+
+        update() {
+          this.life--;
+          balls.forEach((b) => {
+            if (b.team !== this.owner.team && b.hp > 0) {
+              let dist = Math.hypot(b.x - this.x, b.y - this.y);
+              if (dist < b.radius + this.radius) {
+                this.trigger(b);
+                this.life = 0;
+              }
+            }
+          });
+        }
+
+        trigger(target) {
+          let angle = Math.atan2(target.y - this.y, target.x - this.x);
+          if (this.type === "BOING") {
+            target.vx = Math.cos(angle) * 12;
+            target.vy = Math.sin(angle) * 12;
+            let dmg = target.takeDamage(3.0, this.owner);
+            spawnText(
+              "BOING LAUNCH! -" + dmg.toFixed(1),
+              target.x,
+              target.y - 18,
+              "#e84393",
+            );
+          } else if (this.type === "HEAT") {
+            target.stunTimer = 30;
+            let dmg = target.takeDamage(3.0, this.owner);
+            spawnText(
+              "HEAT BURN! -" + dmg.toFixed(1),
+              target.x,
+              target.y - 18,
+              "#f1c40f",
+            );
+          } else if (this.type === "DOKAN") {
+            target.vx = Math.cos(angle) * 8;
+            target.vy = Math.sin(angle) * 8;
+            let dmg = target.takeDamage(5.0, this.owner);
+            spawnText(
+              "DOKAN BOOM! -" + dmg.toFixed(1),
+              target.x,
+              target.y - 18,
+              "#e67e22",
+            );
+            effects.push({
+              type: "black_flash",
+              x: this.x,
+              y: this.y,
+              life: 15,
+              maxLife: 15,
+            });
+          }
+        }
+
+        draw() {
+          ctx.save();
+          ctx.translate(this.x, this.y);
+          let colors = { BOING: "#e84393", HEAT: "#f1c40f", DOKAN: "#e67e22" };
+          let col = colors[this.type] || "#27ae60";
+
+          ctx.beginPath();
+          ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(0,0,0,0.45)";
+          ctx.fill();
+          ctx.strokeStyle = col;
+          ctx.lineWidth = 2.5;
+          ctx.setLineDash([4, 3]);
+          ctx.stroke();
+
+          ctx.fillStyle = col;
+          ctx.font = "bold 13px Arial";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.shadowColor = "#000";
+          ctx.shadowBlur = 4;
+          ctx.fillText(this.type, 0, 0);
+          ctx.restore();
+        }
+      }
 
       class LetterProjectile {
         constructor(x, y, charStr, target, owner) {
@@ -520,44 +625,39 @@
               target.team !== this.owner.team &&
               target.hp > 0
             ) {
-              if (!this.hitTargets.has(target)) {
-                let dist = Math.hypot(target.x - this.x, target.y - this.y);
-                if (dist < target.radius + 10) {
-                  let finalDmg = target.takeDamage(
-                    this.damage,
-                    this.owner,
-                    true,
+              // PERBAIKAN BUG: Tambahkan pengecekan jarak collision agar kunai tidak sure hit dari jauh
+              let dist = Math.hypot(target.x - this.x, target.y - this.y);
+              if (dist < target.radius + 10 && !this.hitTargets.has(target)) {
+                let finalDmg = target.takeDamage(this.damage, this.owner, true);
+                target.iFrames = 12;
+                this.hitTargets.add(target);
+                if (this.owner && this.owner.name === "Stasis") {
+                  this.owner.atkSpeed += 0.01;
+                  this.owner.ultCharge = Math.min(
+                    this.owner.ultMax,
+                    this.owner.ultCharge + 60,
                   );
-                  target.iFrames = 12;
-                  this.hitTargets.add(target);
-                  if (this.owner && this.owner.name === "Stasis") {
-                    this.owner.atkSpeed += 0.01;
-                    this.owner.ultCharge = Math.min(
-                      this.owner.ultMax,
-                      this.owner.ultCharge + 60,
-                    );
-                    spawnText(
-                      "+0.01 Spd | -1s CD",
-                      this.owner.x,
-                      this.owner.y - 28,
-                      "#00d2d3",
-                    );
-                  }
                   spawnText(
-                    "-" + finalDmg.toFixed(1),
-                    target.x,
-                    target.y - 12,
+                    "+0.01 Spd | -1s CD",
+                    this.owner.x,
+                    this.owner.y - 28,
                     "#00d2d3",
                   );
-                  effects.push({
-                    type: "slash",
-                    x: this.x,
-                    y: this.y,
-                    life: 10,
-                    angle: this.angle,
-                  });
-                  if (!this.pierce) this.life = 0;
                 }
+                spawnText(
+                  "-" + finalDmg.toFixed(1),
+                  target.x,
+                  target.y - 12,
+                  "#00d2d3",
+                );
+                effects.push({
+                  type: "slash",
+                  x: this.x,
+                  y: this.y,
+                  life: 10,
+                  angle: this.angle,
+                });
+                if (!this.pierce) this.life = 0;
               }
             }
           });
@@ -659,24 +759,21 @@
               b.hp > 0 &&
               !this.hitTargets.has(b)
             ) {
-              let dist = Math.hypot(b.x - this.x, b.y - this.y);
-              if (dist < b.radius + 18) {
-                this.hitTargets.add(b);
-                let dmg = b.takeDamage(3, this.owner);
-                b.vx = this.vx * 1.2;
-                b.vy = this.vy * 1.2;
-                if (
-                  b.x < 50 ||
-                  b.x > canvas.width - 50 ||
-                  b.y < 50 ||
-                  b.y > canvas.height - 50
-                ) {
-                  b.stunTimer = 60;
-                  spawnText("WALL STUN!", b.x, b.y - 25, "#e74c3c");
-                }
-                this.owner.blueCD = Math.max(0, this.owner.blueCD - 5);
-                spawnText("-" + dmg.toFixed(1), b.x, b.y - 12, "#d63031");
+              this.hitTargets.add(b);
+              let dmg = b.takeDamage(3, this.owner);
+              b.vx = this.vx * 1.2;
+              b.vy = this.vy * 1.2;
+              if (
+                b.x < 50 ||
+                b.x > canvas.width - 50 ||
+                b.y < 50 ||
+                b.y > canvas.height - 50
+              ) {
+                b.stunTimer = 60;
+                spawnText("WALL STUN!", b.x, b.y - 25, "#e74c3c");
               }
+              this.owner.blueCD = Math.max(0, this.owner.blueCD - 5);
+              spawnText("-" + dmg.toFixed(1), b.x, b.y - 12, "#d63031");
             }
           });
         }
@@ -778,6 +875,8 @@
           if (this.name === "Monkey King") {
             this.staffData = { scale: 1.0 };
           }
+
+          this.trapTimer = 0;
 
           this.atkSpeed = 1.0;
           this.ultCharge = 0;
@@ -1249,6 +1348,23 @@
             return;
           }
 
+          if (this.name === "Echoes" && gameState === "playing") {
+            this.trapTimer++;
+            if (this.trapTimer >= 120) {
+              this.trapTimer = 0;
+              let myTraps = soundTraps.filter((t) => t.owner === this);
+              if (myTraps.length >= 4) {
+                let oldest = myTraps[0];
+                let idx = soundTraps.indexOf(oldest);
+                if (idx !== -1) soundTraps.splice(idx, 1);
+              }
+              let types = ["BOING", "HEAT", "DOKAN"];
+              let chosenType = types[Math.floor(Math.random() * types.length)];
+              soundTraps.push(new SoundTrap(this.x, this.y, chosenType, this));
+              spawnText("MARK: " + chosenType, this.x, this.y - 20, "#2ecc71");
+            }
+          }
+
           if (this.name === "Infinity") {
             if (this.mugenCD > 0) this.mugenCD--;
             if (this.blueCD > 0) this.blueCD--;
@@ -1588,7 +1704,44 @@
           }
           this.ultCharge = 0;
 
-          if (this.name === "Infinity") {
+          if (this.name === "Echoes") {
+            this.bonusText = "NOISE OVERLOAD!";
+            let enemy =
+              balls.find(
+                (b) => b.team !== this.team && b.hp > 0 && !b.isClone,
+              ) || balls.find((b) => b.team !== this.team && b.hp > 0);
+            if (enemy) {
+              let types = ["BOING", "HEAT", "DOKAN"];
+              for (let i = 0; i < 4; i++) {
+                let ang = (i * Math.PI * 2) / 3;
+                let tx = Math.max(
+                  30,
+                  Math.min(canvas.width - 30, enemy.x + Math.cos(ang) * 45),
+                );
+                let ty = Math.max(
+                  30,
+                  Math.min(canvas.height - 30, enemy.y + Math.sin(ang) * 45),
+                );
+                soundTraps.push(
+                  new SoundTrap(tx, ty, types[i % types.length], this),
+                );
+              }
+
+              setTimeout(() => {
+                for (let i = soundTraps.length - 1; i >= 0; i--) {
+                  let trap = soundTraps[i];
+                  if (trap.owner === this) {
+                    if (enemy && enemy.hp > 0) trap.trigger(enemy);
+                    soundTraps.splice(i, 1);
+                  }
+                }
+                this.isUltActive = false;
+                this.bonusText = "";
+              }, 250);
+            } else {
+              this.isUltActive = false;
+            }
+          } else if (this.name === "Infinity") {
             this.bonusText = "UNLIMITED VOID!";
             this.domainTimer = 240;
             this.blueCD = 0;
@@ -1636,7 +1789,8 @@
             this.name !== "Sword Saint" &&
             this.name !== "Stasis" &&
             this.name !== "Illustrade" &&
-            this.name !== "Infinity"
+            this.name !== "Infinity" &&
+            this.name !== "Echoes"
           ) {
             let ultDuration = this.name === "Brawler" ? 1000 : 5000;
             setTimeout(() => {
@@ -1812,7 +1966,6 @@
                     let finalDmg = B.takeDamage(A.damage, A);
                     B.iFrames = 60;
 
-                    // MONKEY KING STAFF GROW CAP AT 3X
                     if (A.name === "Monkey King" && A.staffData) {
                       if (A.staffData.scale < 3.0) {
                         A.staffData.scale = Math.min(
@@ -1886,7 +2039,6 @@
                     let finalDmg = A.takeDamage(B.damage, B);
                     A.iFrames = 60;
 
-                    // MONKEY KING STAFF GROW CAP AT 3X
                     if (B.name === "Monkey King" && B.staffData) {
                       if (B.staffData.scale < 3.0) {
                         B.staffData.scale = Math.min(
@@ -1955,7 +2107,8 @@
                   B.iFrames === 0 &&
                   (A.name === "Brawler" ||
                     A.name === "Divergent" ||
-                    A.name === "Infinity")
+                    A.name === "Infinity" ||
+                    A.name === "Echoes")
                 ) {
                   let isBlackFlash = false,
                     hitDmg = A.damage;
@@ -2013,7 +2166,8 @@
                   A.iFrames === 0 &&
                   (B.name === "Brawler" ||
                     B.name === "Divergent" ||
-                    B.name === "Infinity")
+                    B.name === "Infinity" ||
+                    B.name === "Echoes")
                 ) {
                   let isBlackFlash = false,
                     hitDmg = B.damage;
@@ -2100,6 +2254,14 @@
         let lines = [];
         lines.push(`HP: ${Math.max(0, Math.floor(p.hp))}/${p.maxHp}`);
         switch (p.name) {
+          case "Echoes":
+            let myTrapCount = soundTraps.filter((t) => t.owner === p).length;
+            lines.push(`Body Dmg: ${p.damage.toFixed(1)}`);
+            lines.push(`Active Traps: ${myTrapCount}/4`);
+            lines.push(
+              `Next Trap: ${Math.max(0, Math.ceil((120 - p.trapTimer) / 60)).toFixed(1)}s`,
+            );
+            break;
           case "Infinity":
             lines.push(
               `Mugen: ${p.mugenCD <= 0 ? "READY" : Math.ceil(p.mugenCD / 60) + "s"}`,
@@ -2264,6 +2426,12 @@
         } else if (gameState === "playing") {
           balls.forEach((b) => b.update());
           checkPhysicsAndHits();
+        }
+
+        for (let i = soundTraps.length - 1; i >= 0; i--) {
+          if (gameState === "playing") soundTraps[i].update();
+          soundTraps[i].draw();
+          if (soundTraps[i].life <= 0) soundTraps.splice(i, 1);
         }
 
         for (let i = infinitySkills.length - 1; i >= 0; i--) {
@@ -2499,6 +2667,7 @@
         p2Choice = null;
         projectiles = [];
         infinitySkills = [];
+        soundTraps = [];
         gameState = "menu";
       }
 
@@ -2537,6 +2706,7 @@
         balls = [];
         projectiles = [];
         infinitySkills = [];
+        soundTraps = [];
         balls.push(
           new Ball(1, p1Choice, canvas.width * 0.25, canvas.height / 2),
         );
