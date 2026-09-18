@@ -16,7 +16,7 @@ const characterDB = {
     rotSpeed: 0.02,
     ultName: "BLACK METEORITE",
     ultColor: "#c0392b",
-    desc: "Asta-Inspired: Spell Erase, Ult Drain & Black Form",
+    desc: "Spell Erase, Ult Drain & Black Form",
     ultMax: 2200,
   },
   Copycat: {
@@ -32,6 +32,20 @@ const characterDB = {
     ultColor: "#FF76CE",
     desc: "Copycat, Ult & Passive Duplicate",
     ultMax: 1800,
+  },
+  "Killer Queen": {
+    color: "#FFB5DA",
+    hp: 100,
+    damage: 3,
+    speed: 2.55,
+    weapons: 0,
+    wLen: 0,
+    wWidth: 0,
+    rotSpeed: 0,
+    ultName: "BITES THE DUST",
+    ultColor: "#FFB5DA",
+    desc: "Contact Bombs, Sheer Heart Attack & Bites the Dust",
+    ultMax: 1000,
   },
   Echoes: {
     color: "#2ecc71",
@@ -354,6 +368,7 @@ let effects = [];
 let infinitySkills = [];
 let soundTraps = [];
 let scatteredSwords = [];
+let killerQueenSkills = [];
 
 class ScatteredSword {
   constructor(x, y) {
@@ -684,6 +699,229 @@ class PurpleBeam {
   }
 }
 
+class KillerQueenBomb {
+  constructor(owner, target) {
+    this.owner = owner;
+    this.target = target;
+    this.life = 180; // 3 seconds at 60 FPS
+    this.damage = owner.kqBombDamage;
+  }
+
+  update() {
+    if (!this.target || this.target.hp <= 0) {
+      this.life = 0;
+      return;
+    }
+
+    this.life--;
+
+    if (this.life <= 0) {
+      let finalDmg = this.target.takeDamage(this.damage, this.owner);
+      spawnText("-" + finalDmg.toFixed(1), this.target.x, this.target.y - 12, "#c0392b");
+      effects.push({
+        type: "kq_explosion",
+        x: this.target.x,
+        y: this.target.y,
+        life: 24,
+        maxLife: 24,
+      });
+
+      // Every successful explosion permanently increases the owner's next bomb damage.
+      this.owner.kqBombDamage += 0.5;
+
+      let idx = this.target.kqBombStacks.indexOf(this);
+      if (idx !== -1) this.target.kqBombStacks.splice(idx, 1);
+    }
+  }
+
+  draw() {
+    if (!this.target || this.target.hp <= 0) return;
+
+    let pulse = 1 + Math.sin(Date.now() * 0.015) * 0.12;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(this.target.x, this.target.y - this.target.radius - 7, 5 * pulse, 0, Math.PI * 2);
+    ctx.fillStyle = "#1D2B53";
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "#5b2922";
+    ctx.stroke();
+
+    // Small stack counter.
+    ctx.font = "bold 10px Arial";
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#5b2922";
+    ctx.fillText(String(this.target.kqBombStacks.length), this.target.x, this.target.y - this.target.radius - 15);
+    ctx.restore();
+  }
+}
+
+class SheerHeartAttack {
+  constructor(owner, target) {
+    this.owner = owner;
+    this.target = target;
+    this.x = owner.x;
+    this.y = owner.y;
+    this.radius = 13;
+    this.speed = 0.75; // intentionally slow
+    this.life = 900;
+    this.exploded = false;
+  }
+
+  update() {
+    if (!this.target || this.target.hp <= 0) {
+      this.explode();
+      return;
+    }
+
+    let dx = this.target.x - this.x;
+    let dy = this.target.y - this.y;
+    let dist = Math.hypot(dx, dy) || 1;
+
+    this.x += (dx / dist) * this.speed;
+    this.y += (dy / dist) * this.speed;
+    this.life--;
+
+    if (dist <= this.radius + this.target.radius + 2 || this.life <= 0) {
+      this.explode();
+    }
+  }
+
+  // Anti-Magic can dispel SHA without causing its explosion damage.
+  eraseByAntimagic() {
+    if (this.exploded) return;
+    this.exploded = true;
+
+    this.owner.kqSheerHeartAttackActive = false;
+    this.owner.kqSheerHeartAttackCD = 1200; // 20 seconds
+
+    effects.push({
+      type: "black_flash",
+      x: this.x,
+      y: this.y,
+      life: 15,
+      maxLife: 15,
+    });
+
+    this.life = 0;
+  }
+
+  explode() {
+    if (this.exploded) return;
+    this.exploded = true;
+
+    // Damage for SHA is deliberately modest; its main role is pressure/chasing.
+    if (this.target && this.target.hp > 0) {
+      let finalDmg = this.target.takeDamage(4, this.owner);
+      spawnText("-" + finalDmg.toFixed(1), this.target.x, this.target.y - 12, "#1D2B53");
+      effects.push({
+        type: "kq_explosion",
+        x: this.x,
+        y: this.y,
+        life: 24,
+        maxLife: 24,
+      });
+    } else {
+      effects.push({
+        type: "kq_explosion",
+        x: this.x,
+        y: this.y,
+        life: 24,
+        maxLife: 24,
+      });
+    }
+
+    this.owner.kqSheerHeartAttackActive = false;
+    this.owner.kqSheerHeartAttackCD = 1200; // 20 seconds, starts after SHA explodes
+    this.life = 0;
+  }
+
+  draw() {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(Date.now() * 0.006);
+
+    ctx.fillStyle = "#1D2B53";
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = "#1D2B53";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Simple eye-like mark.
+    ctx.fillStyle = "#1D2B53";
+    ctx.beginPath();
+    ctx.arc(4, -3, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+}
+
+class BitesTheDustBomb {
+  constructor(owner, target) {
+    this.owner = owner;
+    this.target = target;
+    this.life = 300; // 5 seconds at 60 FPS
+    this.damage = 10 + 3; // 10 + Killer Queen's base bomb damage
+    this.heal = 5 + (3 / 2); // 5 + half of base bomb damage = 6.5
+    this.x = target ? target.x : owner.x;
+    this.y = target ? target.y : owner.y;
+    this.exploded = false;
+  }
+
+  update() {
+    this.life--;
+    if (this.target && this.target.hp > 0) {
+      this.x = this.target.x;
+      this.y = this.target.y;
+    }
+
+    if (this.life <= 0) this.explode();
+  }
+
+  explode() {
+    if (this.exploded) return;
+    this.exploded = true;
+
+    let finalDmg = 0;
+    if (this.target && this.target.hp > 0) {
+      finalDmg = this.target.takeDamage(this.damage, this.owner);
+    }
+
+    if (this.owner && this.owner.hp > 0) {
+      this.owner.hp = Math.min(this.owner.maxHp, this.owner.hp + this.heal);
+    }
+
+    effects.push({
+      type: "kq_explosion",
+      x: this.x,
+      y: this.y,
+      life: 36,
+      maxLife: 36,
+    });
+
+    this.owner.kqBitesBombActive = false;
+    this.owner.ultCharge = 0;
+    this.owner.kqBitesArmed = false;
+    this.life = 0;
+  }
+
+  draw() {
+    let pulse = 1 + Math.sin(Date.now() * 0.012) * 0.15;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(this.x, this.y - (this.target && this.target.hp > 0 ? this.target.radius + 7 : 0), 7 * pulse, 0, Math.PI * 2);
+    ctx.fillStyle = "#FFB5DA";
+    ctx.shadowColor = "#FFB5DA";
+    ctx.shadowBlur = 12;
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
 class Ball {
   constructor(team, name, x, y, isClone = false) {
     let stats = characterDB[name] || characterDB["Copycat"];
@@ -750,6 +988,16 @@ class Ball {
     this.domainTimer = 0;
     this.domainDebuffTimer = 0;
     this.stunTimer = 0;
+
+    // Killer Queen
+    this.kqBombDamage = 3;
+    this.kqContactCooldown = 0;
+    this.kqBombStacks = [];
+    this.kqSheerHeartAttackActive = false;
+    this.kqSheerHeartAttackCD = 0;
+    this.kqBitesTarget = null;
+    this.kqBitesArmed = false;
+    this.kqBitesBombActive = false;
   }
 
   takeDamage(amount, attacker = null, isProjectile = false) {
@@ -860,6 +1108,18 @@ class Ball {
 
   draw() {
     if (!this.visible) return;
+
+    if (this.name === "Killer Queen") {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius + 5, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(190, 155, 145, 0.18)";
+      ctx.fill();
+      ctx.strokeStyle = "#8f6f66";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.restore();
+    }
 
     if (this.name === "Copycat") {
       ctx.save();
@@ -1136,6 +1396,31 @@ class Ball {
   }
 
   update() {
+    if (this.name === "Killer Queen") {
+      if (this.kqContactCooldown > 0) this.kqContactCooldown--;
+      if (this.kqSheerHeartAttackCD > 0) this.kqSheerHeartAttackCD--;
+
+      // Release SHA automatically when its 20s cooldown is ready.
+      if (
+        !this.kqSheerHeartAttackActive &&
+        this.kqSheerHeartAttackCD <= 0 &&
+        gameState === "playing"
+      ) {
+        let enemy = balls.find((b) => b.team !== this.team && b.hp > 0 && !b.isClone);
+        if (enemy) {
+          killerQueenSkills.push(new SheerHeartAttack(this, enemy));
+          this.kqSheerHeartAttackActive = true;
+          spawnText("SHEER HEART ATTACK!", this.x, this.y - 30, "#1D2B53");
+        }
+      }
+
+      // Bites the Dust is armed automatically once its ultimate meter is full.
+      // It does not trigger immediately; it is planted on contact.
+      if (this.ultCharge >= this.ultMax && !this.kqBitesArmed) {
+        this.kqBitesArmed = true;
+      }
+    }
+
     if (this.name === "Antimagic") {
       this.stunTimer = 0;
       this.domainDebuffTimer = 0;
@@ -1595,6 +1880,14 @@ class Ball {
   }
 
   activateUlt() {
+    if (this.name === "Killer Queen") {
+      // Bites the Dust behaves like Vessel's Determination: once full,
+      // the meter stays FULL until the trap actually triggers.
+      this.isUltActive = false;
+      this.kqBitesArmed = true;
+      return;
+    }
+
     this.isUltActive = true;
     if (this.name === "Vessel") {
       this.bonusText = "DETERMINED!";
@@ -1777,7 +2070,42 @@ function drawUnlimitedVoidBG() {
   ctx.restore();
 }
 
+function eraseKillerQueenSHAByAntimagic(antiMagic) {
+  if (!antiMagic || antiMagic.name !== "Antimagic" || antiMagic.hp <= 0) return;
+
+  const weaponSegs = antiMagic.getWeaponSegments();
+  for (let i = killerQueenSkills.length - 1; i >= 0; i--) {
+    const skill = killerQueenSkills[i];
+    if (!(skill instanceof SheerHeartAttack)) continue;
+    if (!skill.owner || skill.owner.team === antiMagic.team || skill.exploded) continue;
+
+    for (const seg of weaponSegs) {
+      const cp = getClosestPointOnSegment(
+        { x: skill.x, y: skill.y },
+        seg.p1,
+        seg.p2
+      );
+      const dx = skill.x - cp.x;
+      const dy = skill.y - cp.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance < skill.radius + 5) {
+        skill.eraseByAntimagic();
+        killerQueenSkills.splice(i, 1);
+        break;
+      }
+    }
+  }
+}
+
 function checkPhysicsAndHits() {
+  // Anti-Magic's sword can directly hit and dispel an active SHA.
+  for (const ball of balls) {
+    if (ball.name === "Antimagic" && ball.hp > 0) {
+      eraseKillerQueenSHAByAntimagic(ball);
+    }
+  }
+
   for (let i = 0; i < balls.length; i++) {
     let A = balls[i];
     for (let j = i + 1; j < balls.length; j++) {
@@ -1922,6 +2250,43 @@ function checkPhysicsAndHits() {
         B.vy = tempVy;
 
         if (isEnemy) {
+          // Killer Queen: touching an enemy plants a bomb stack (max 3).
+          if (A.name === "Killer Queen" && A.kqContactCooldown <= 0 && B.hp > 0) {
+            if (!B.kqBombStacks) B.kqBombStacks = [];
+            if (B.kqBombStacks.length < 3) {
+              let bomb = new KillerQueenBomb(A, B);
+              B.kqBombStacks.push(bomb);
+              A.kqContactCooldown = 30;
+              spawnText("BOMB +" + B.kqBombStacks.length, B.x, B.y - 25, "#b85c4a");
+            }
+          }
+
+          if (B.name === "Killer Queen" && B.kqContactCooldown <= 0 && A.hp > 0) {
+            if (!A.kqBombStacks) A.kqBombStacks = [];
+            if (A.kqBombStacks.length < 3) {
+              let bomb = new KillerQueenBomb(B, A);
+              A.kqBombStacks.push(bomb);
+              B.kqContactCooldown = 30;
+              spawnText("BOMB +" + A.kqBombStacks.length, A.x, A.y - 25, "#b85c4a");
+            }
+          }
+
+          // Bites the Dust: when KQ's ult is ready, touching an enemy
+          // plants one additional BTD bomb. It explodes after 5 seconds.
+          if (A.name === "Killer Queen" && A.kqBitesArmed && !A.kqBitesBombActive && B.hp > 0 && !B.isClone) {
+            A.kqBitesBombActive = true;
+            A.kqBitesArmed = false;
+            A.kqBitesTarget = B;
+            killerQueenSkills.push(new BitesTheDustBomb(A, B));
+          }
+
+          if (B.name === "Killer Queen" && B.kqBitesArmed && !B.kqBitesBombActive && A.hp > 0 && !A.isClone) {
+            B.kqBitesBombActive = true;
+            B.kqBitesArmed = false;
+            B.kqBitesTarget = A;
+            killerQueenSkills.push(new BitesTheDustBomb(B, A));
+          }
+
           if (A.weapons === 0 && B.iFrames === 0 && (A.name === "Brawler" || A.name === "Divergent" || A.name === "Infinity" || A.name === "Echoes")) {
             let isBlackFlash = false, hitDmg = A.damage;
             if (A.name === "Divergent") {
@@ -1997,6 +2362,13 @@ function getCharSpecificStats(p) {
       lines.push(`Demon Blade Dmg: ${p.damage.toFixed(1)}`);
       lines.push(`Anti-Magic: Sword Dispel`);
       lines.push(`Status: ${p.isUltActive ? "BLACK FORM" : "Ready"}`);
+      break;
+    case "Killer Queen":
+      lines.push(`Bomb Dmg: ${p.kqBombDamage.toFixed(1)}`);
+      let kqTarget = balls.find((b) => b.team !== p.team && b.hp > 0 && !b.isClone);
+      lines.push(`Bomb Stacks: ${kqTarget ? kqTarget.kqBombStacks.length : 0}/3`);
+      lines.push(`Sheer Heart Attack: ${p.kqSheerHeartAttackActive ? "ACTIVE" : p.kqSheerHeartAttackCD > 0 ? Math.ceil(p.kqSheerHeartAttackCD / 60) + "s" : "READY"}`);
+      lines.push(`Bites the Dust: ${p.kqBitesArmed ? "READY" : p.kqBitesBombActive ? "ACTIVE" : "Charging"}`);
       break;
     case "Copycat":
       lines.push(`Katana Dmg: ${p.damage.toFixed(1)}`);
@@ -2157,6 +2529,12 @@ function gameLoop() {
     if (infinitySkills[i].life <= 0) infinitySkills.splice(i, 1);
   }
 
+  for (let i = killerQueenSkills.length - 1; i >= 0; i--) {
+    if (gameState === "playing") killerQueenSkills[i].update();
+    killerQueenSkills[i].draw();
+    if (killerQueenSkills[i].life <= 0) killerQueenSkills.splice(i, 1);
+  }
+
   for (let i = projectiles.length - 1; i >= 0; i--) {
     let p = projectiles[i];
     if (gameState === "playing" || (stasisCaster && p.owner === stasisCaster)) p.update();
@@ -2167,6 +2545,17 @@ function gameLoop() {
   for (let i = balls.length - 1; i >= 0; i--) {
     if (balls[i].hp <= 0) balls.splice(i, 1);
     else balls[i].draw();
+  }
+
+  // Update all active Killer Queen bombs after balls are drawn.
+  for (let i = balls.length - 1; i >= 0; i--) {
+    let target = balls[i];
+    if (!target.kqBombStacks) continue;
+    for (let j = target.kqBombStacks.length - 1; j >= 0; j--) {
+      let bomb = target.kqBombStacks[j];
+      if (gameState === "playing") bomb.update();
+      bomb.draw();
+    }
   }
 
   for (let i = effects.length - 1; i >= 0; i--) {
@@ -2207,6 +2596,19 @@ function gameLoop() {
         ctx.lineTo(Math.cos(ang) * (radius + 5), Math.sin(ang) * (radius + 5));
         ctx.stroke();
       }
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "kq_explosion") {
+      ctx.save();
+      let progress = 1 - ef.life / ef.maxLife;
+      let radius = 12 + progress * 32;
+      ctx.beginPath();
+      ctx.arc(ef.x, ef.y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(184, 92, 74, ${0.28 * (1 - progress)})`;
+      ctx.fill();
+      ctx.strokeStyle = `rgba(91, 41, 34, ${1 - progress})`;
+      ctx.lineWidth = 3;
+      ctx.stroke();
       ctx.restore();
       ef.life--;
     } else if (ef.type === "black_flash") {
@@ -2346,11 +2748,7 @@ function gameLoop() {
       ctx.textAlign = "center";
       let drawY = ef.y - (30 - ef.life);
 
-      // Garis tepi hitam tebal agar selalu terbaca tajam
-    //   ctx.strokeStyle = "#000000";
-    //   ctx.lineWidth = 3.5;
-    //   ctx.strokeText(ef.text, ef.x, drawY);
-
+      // Teks tanpa outline agar lebih nyaman dilihat.
       // Isi warna teks utama
       ctx.fillStyle = ef.color;
       ctx.fillText(ef.text, ef.x, drawY);
@@ -2387,6 +2785,7 @@ function resetToMenu() {
   infinitySkills = [];
   soundTraps = [];
   scatteredSwords = [];
+  killerQueenSkills = [];
   gameState = "menu";
 }
 
@@ -2473,8 +2872,7 @@ function setupGame() {
     
     nameEl.innerText = choice;
     nameEl.style.color = characterDB[choice].color;
-    // Outline tebal pada nama karakter agar selalu kontras terang/gelap
-    // nameEl.style.textShadow = "-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000";
+    nameEl.style.textShadow = "none";
 
     document.getElementById("barFill" + id).style.backgroundColor = characterDB[choice].ultColor;
     document.getElementById("ultName" + id).innerText = characterDB[choice].ultName;
@@ -2485,6 +2883,7 @@ function setupGame() {
   infinitySkills = [];
   soundTraps = [];
   scatteredSwords = [];
+  killerQueenSkills = [];
   balls.push(new Ball(1, p1Choice, canvas.width * 0.25, canvas.height / 2));
   balls.push(new Ball(2, p2Choice, canvas.width * 0.75, canvas.height / 2));
 
