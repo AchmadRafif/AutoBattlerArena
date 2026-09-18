@@ -105,13 +105,13 @@ const characterDB = {
   },
   Juggernaut: {
     color: "#7f8c8d",
-    hp: 450,
-    damage: 2.5,
+    hp: 250,
+    damage: 3.5,
     speed: 1.4,
     weapons: 2,
-    wLen: 60,
-    wWidth: 18,
-    rotSpeed: 0.01,
+    wLen: 62,
+    wWidth: 22,
+    rotSpeed: 0.02,
     ultName: "TITAN FORM",
     ultColor: "#7f8c8d",
     desc: "Giant Tank",
@@ -519,8 +519,14 @@ class Projectile {
       this.delayTimer--;
       return;
     }
-    this.x += this.vx;
-    this.y += this.vy;
+    if (this.stunTimer > 0) {
+      this.stunTimer--;
+      this.vx = 0;
+      this.vy = 0;
+    } else {
+      this.x += this.vx;
+      this.y += this.vy;
+    }
     this.life--;
     balls.forEach((target) => {
       if (target !== this.owner && target.team !== this.owner.team && target.hp > 0) {
@@ -621,8 +627,14 @@ class RedWave {
     this.hitTargets = new Set();
   }
   update() {
-    this.x += this.vx;
-    this.y += this.vy;
+    if (this.stunTimer > 0) {
+      this.stunTimer--;
+      this.vx = 0;
+      this.vy = 0;
+    } else {
+      this.x += this.vx;
+      this.y += this.vy;
+    }
     this.life--;
     balls.forEach((b) => {
       if (b.team !== this.owner.team && b.hp > 0 && !this.hitTargets.has(b)) {
@@ -930,7 +942,7 @@ class Ball {
     this.isClone = isClone;
     this.x = x;
     this.y = y;
-    this.baseRadius = isClone ? 15 : 25;
+    this.baseRadius = isClone ? 15 : (name === "Juggernaut" ? 40 : 25);
     this.radius = this.baseRadius;
     this.color = stats.color;
     this.maxHp = isClone ? 80 : stats.hp;
@@ -963,6 +975,14 @@ class Ball {
     this.visible = true;
     this.timeStopTimer = 0;
     this.swingTimer = 0;
+    this.retaliatorIdleAngle = Math.random() * Math.PI * 2;
+    this.retaliatorIdlePhase = Math.random() * Math.PI * 2;
+
+    // Juggernaut Momentum
+    this.momentum = 0;
+    this.momentumCombatTimer = 0;
+    this.stunTimer = 0;
+    this.knockbackTimer = 0;
     this.zoneRadius = 140;
     this.combatTimer = 0;
     this.shootCooldown = 0;
@@ -1015,7 +1035,20 @@ class Ball {
     }
     if (this.domainDebuffTimer > 0) amount *= 1.4;
 
+    // Retaliator is a counter-focused tank: takes 50% less damage.
     let actualDamage = amount;
+    if (this.name === "Retaliator") {
+      actualDamage *= 0.5;
+    }
+
+    // Juggernaut gets tougher as Momentum builds, up to 50% damage reduction.
+    if (this.name === "Juggernaut") {
+      const damageReduction = Math.min(0.50, (this.momentum / 100) * 0.50);
+      actualDamage *= 1 - damageReduction;
+      // Momentum is earned from combat: getting hit builds Momentum too.
+      this.momentum = Math.min(100, this.momentum + 5);
+      this.momentumCombatTimer = 300;
+    }
     if (this.name === "Retaliator" && attacker && attacker.team !== this.team) {
       this.combatTimer = 180;
       this.triggerRetaliation(attacker);
@@ -1339,7 +1372,77 @@ class Ball {
       ctx.restore();
     } else {
       let segs = this.getWeaponSegments();
+
+      // Retaliator idle sword: point away from the nearest enemy.
+      // Visual-only while idle; the actual hitbox remains unchanged.
+      if (this.name === "Retaliator" && !this.isUltActive && this.swingTimer <= 0) {
+        let nearestEnemy = null;
+        let nearestDist = Infinity;
+        balls.forEach((enemy) => {
+          if (enemy === this || enemy.team === this.team || enemy.hp <= 0) return;
+          const dx = enemy.x - this.x;
+          const dy = enemy.y - this.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < nearestDist) {
+            nearestDist = dist;
+            nearestEnemy = enemy;
+          }
+        });
+
+        if (nearestEnemy) {
+          const awayAngle = Math.atan2(this.y - nearestEnemy.y, this.x - nearestEnemy.x);
+          let diff = awayAngle - this.retaliatorIdleAngle;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          this.retaliatorIdleAngle += diff * 0.12;
+        } else {
+          let diff = this.angle - this.retaliatorIdleAngle;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          this.retaliatorIdleAngle += diff * 0.08;
+        }
+
+        const idleAng = this.retaliatorIdleAngle;
+        const startX = this.x + Math.cos(idleAng) * this.radius;
+        const startY = this.y + Math.sin(idleAng) * this.radius;
+        const endX = this.x + Math.cos(idleAng) * (this.radius + this.wLen);
+        const endY = this.y + Math.sin(idleAng) * (this.radius + this.wLen);
+        segs = [{ p1: { x: startX, y: startY }, p2: { x: endX, y: endY } }];
+      }
+
       segs.forEach((seg) => {
+        if (this.name === "Juggernaut") {
+          const dx = seg.p2.x - seg.p1.x, dy = seg.p2.y - seg.p1.y;
+          const len = Math.hypot(dx, dy) || 1;
+          const ux = dx / len, uy = dy / len;
+          const px = -uy, py = ux;
+          // Juggernaut is huge, so its hammer is huge too (2x visual size).
+          const headCenterX = seg.p2.x - ux * 14;
+          const headCenterY = seg.p2.y - uy * 14;
+          const headLen = 52;
+          const headWidth = 60;
+          ctx.save();
+          ctx.lineCap = "round";
+          ctx.strokeStyle = "#5b4636";
+          ctx.lineWidth = 16;
+          ctx.beginPath();
+          ctx.moveTo(seg.p1.x, seg.p1.y);
+          ctx.lineTo(headCenterX, headCenterY);
+          ctx.stroke();
+          ctx.fillStyle = this.isUltActive ? "#b0b0b0" : "#777";
+          ctx.beginPath();
+          ctx.moveTo(headCenterX - ux * headLen / 2 - px * headWidth / 2, headCenterY - uy * headLen / 2 - py * headWidth / 2);
+          ctx.lineTo(headCenterX + ux * headLen / 2 - px * headWidth / 2, headCenterY + uy * headLen / 2 - py * headWidth / 2);
+          ctx.lineTo(headCenterX + ux * headLen / 2 + px * headWidth / 2, headCenterY + uy * headLen / 2 + py * headWidth / 2);
+          ctx.lineTo(headCenterX - ux * headLen / 2 + px * headWidth / 2, headCenterY - uy * headLen / 2 + py * headWidth / 2);
+          ctx.closePath();
+          ctx.fill();
+          ctx.strokeStyle = "#444";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.restore();
+          return;
+        }
         ctx.beginPath();
         ctx.moveTo(seg.p1.x, seg.p1.y);
         ctx.lineTo(seg.p2.x, seg.p2.y);
@@ -1396,6 +1499,17 @@ class Ball {
   }
 
   update() {
+    // Copycat clone created by Monkey King's Trickster Clone lasts exactly 5 seconds.
+    // It can still use Copycat's passive normally; only its lifetime is limited.
+    if (this.copycatCloneLife !== undefined) {
+      this.copycatCloneLife--;
+      if (this.copycatCloneLife <= 0) {
+        this.hp = 0;
+        this.visible = false;
+        return;
+      }
+    }
+
     if (this.name === "Killer Queen") {
       if (this.kqContactCooldown > 0) this.kqContactCooldown--;
       if (this.kqSheerHeartAttackCD > 0) this.kqSheerHeartAttackCD--;
@@ -1506,7 +1620,7 @@ class Ball {
 
     if (this.name === "Copycat") {
       this.copycatPassiveTimer++;
-      if (this.copycatPassiveTimer >= 180 && gameState === "playing") {
+      if (this.copycatPassiveTimer >= 300 && gameState === "playing") {
         this.copycatPassiveTimer = 0;
         let enemy = balls.find((b) => b.team !== this.team && b.hp > 0);
         if (enemy) {
@@ -1585,6 +1699,9 @@ class Ball {
                 spawnText("[VALKYRIE] VALHALLA REGEN (+35 HP)!", this.x, this.y - 30, "#FF76CE");
               } else if (ultType === 6) {
                 let clone = new Ball(this.team, "Copycat", this.x + 30, this.y, true);
+                // This specific Copycat clone comes from Monkey King's copied ultimate.
+                // It keeps Copycat passive, but disappears after 5 seconds (300 frames).
+                clone.copycatCloneLife = 2000;
                 let ang = Math.random() * Math.PI * 2;
                 clone.vx = Math.cos(ang) * clone.baseSpeed;
                 clone.vy = Math.sin(ang) * clone.baseSpeed;
@@ -1706,9 +1823,20 @@ class Ball {
       else this.ultCharge = Math.max(0, this.ultCharge - this.bfSpeed);
     }
 
+    if (this.name === "Juggernaut") {
+      // Momentum is combat-based: movement never generates it. After a
+      // short period without hitting or being hit, Momentum starts draining.
+      if (this.momentumCombatTimer > 0) {
+        this.momentumCombatTimer--;
+      } else if (this.momentum > 0) {
+        this.momentum = Math.max(0, this.momentum - 0.1);
+      }
+      this.damage = characterDB["Juggernaut"].damage * (1 + this.momentum / 100);
+    }
+
     if (this.name === "Retaliator") {
       if (this.combatTimer > 0) this.combatTimer--;
-      else this.damage += 0.001;
+      else this.damage += 0.005;
       let hasEnemyInZone = false;
       if (this.isUltActive) {
         this.vx = 0;
@@ -1818,8 +1946,14 @@ class Ball {
       }
     }
 
-    this.x += this.vx;
-    this.y += this.vy;
+    if (this.stunTimer > 0) {
+      this.stunTimer--;
+      this.vx = 0;
+      this.vy = 0;
+    } else {
+      this.x += this.vx;
+      this.y += this.vy;
+    }
 
     if (this.name === "Stasis") {
       this.shootCooldown--;
@@ -1856,20 +1990,33 @@ class Ball {
 
     if (this.x - this.radius <= 0) {
       this.x = this.radius;
-      this.vx *= -1;
+      if (this.knockbackTimer > 0 && this.vx < -0.5) {
+        this.vx = 0; this.vy = 0; this.stunTimer = 48;
+        spawnText("STUN!", this.x, this.y - this.radius - 8, "#f1c40f");
+      } else this.vx *= -1;
     }
     if (this.x + this.radius >= canvas.width) {
       this.x = canvas.width - this.radius;
-      this.vx *= -1;
+      if (this.knockbackTimer > 0 && this.vx > 0.5) {
+        this.vx = 0; this.vy = 0; this.stunTimer = 48;
+        spawnText("STUN!", this.x, this.y - this.radius - 8, "#f1c40f");
+      } else this.vx *= -1;
     }
     if (this.y - this.radius <= 0) {
       this.y = this.radius;
-      this.vy *= -1;
+      if (this.knockbackTimer > 0 && this.vy < -0.5) {
+        this.vx = 0; this.vy = 0; this.stunTimer = 48;
+        spawnText("STUN!", this.x, this.y - this.radius - 8, "#f1c40f");
+      } else this.vy *= -1;
     }
     if (this.y + this.radius >= canvas.height) {
       this.y = canvas.height - this.radius;
-      this.vy *= -1;
+      if (this.knockbackTimer > 0 && this.vy > 0.5) {
+        this.vx = 0; this.vy = 0; this.stunTimer = 48;
+        spawnText("STUN!", this.x, this.y - this.radius - 8, "#f1c40f");
+      } else this.vy *= -1;
     }
+    if (this.knockbackTimer > 0) this.knockbackTimer--;
 
     if (gameState === "playing" && !this.isClone && !this.isUltActive && this.name !== "Death Note" && this.name !== "Divergent") {
       this.ultCharge = Math.min(this.ultMax, this.ultCharge + 1);
@@ -1903,7 +2050,8 @@ class Ball {
       spawnText("ANTI-MAGIC SURGE!", this.x, this.y - 30, "#e74c3c");
     } else if (this.name === "Copycat") {
       this.bonusText = "SWORD DOMAIN!";
-      scatteredSwords = [];
+      // Do NOT clear existing swords. This lets Copycat vs Copycat keep both
+      // Sword Domain sword sets on the map at the same time.
       for (let i = 0; i < 8; i++) {
         let sx = 40 + Math.random() * (canvas.width - 80);
         let sy = 40 + Math.random() * (canvas.height - 80);
@@ -2157,6 +2305,16 @@ function checkPhysicsAndHits() {
               A.rotSpeed *= -1;
               let finalDmg = B.takeDamage(A.damage, A);
               B.iFrames = 60;
+              if (A.name === "Juggernaut") {
+                A.momentum = Math.min(100, A.momentum + 5);
+                A.momentumCombatTimer = 300;
+                const kbDx = B.x - A.x, kbDy = B.y - A.y;
+                const kbDist = Math.hypot(kbDx, kbDy) || 1;
+                const kbForce = A.isUltActive ? 10 : 7;
+                B.vx = (kbDx / kbDist) * kbForce;
+                B.vy = (kbDy / kbDist) * kbForce;
+                B.knockbackTimer = 45;
+              }
 
               if (A.name === "Antimagic") {
                 B.ultCharge = Math.max(0, B.ultCharge - 200);
@@ -2203,6 +2361,16 @@ function checkPhysicsAndHits() {
               B.rotSpeed *= -1;
               let finalDmg = A.takeDamage(B.damage, B);
               A.iFrames = 60;
+              if (B.name === "Juggernaut") {
+                B.momentum = Math.min(100, B.momentum + 5);
+                B.momentumCombatTimer = 300;
+                const kbDx = A.x - B.x, kbDy = A.y - B.y;
+                const kbDist = Math.hypot(kbDx, kbDy) || 1;
+                const kbForce = B.isUltActive ? 10 : 7;
+                A.vx = (kbDx / kbDist) * kbForce;
+                A.vy = (kbDy / kbDist) * kbForce;
+                A.knockbackTimer = 45;
+              }
 
               if (B.name === "Antimagic") {
                 A.ultCharge = Math.max(0, A.ultCharge - 200);
@@ -2372,7 +2540,7 @@ function getCharSpecificStats(p) {
       break;
     case "Copycat":
       lines.push(`Katana Dmg: ${p.damage.toFixed(1)}`);
-      lines.push(`Passive Copy: ${Math.max(0, 3.0 - p.copycatPassiveTimer / 60).toFixed(1)}s`);
+      lines.push(`Passive Copy: ${Math.max(0, 5.0 - p.copycatPassiveTimer / 60).toFixed(1)}s`);
       lines.push(`Status: ${p.isUltActive ? "SWORD DOMAIN" : "Ready"}`);
       break;
     case "Echoes":
@@ -2426,7 +2594,10 @@ function getCharSpecificStats(p) {
       if (p.isUltActive) lines.push(`Runic Storm: ${p.floatingChars.length} Runes`);
       break;
     case "Juggernaut":
-      lines.push(`Gada Dmg: ${p.damage.toFixed(1)}`);
+      lines.push(`Hammer Dmg: ${p.damage.toFixed(1)}`);
+      lines.push(`Momentum: ${p.momentum.toFixed(0)}%`);
+      lines.push(`Combat: ${p.momentumCombatTimer > 0 ? "Active" : "Draining"}`);
+      lines.push(`Damage Reduction: ${(Math.min(50, p.momentum * 0.5)).toFixed(0)}%`);
       lines.push(`Form: ${p.isUltActive ? "TITAN FORM" : "Normal"}`);
       break;
     case "Valkyrie":
