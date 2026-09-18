@@ -1,0 +1,2506 @@
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+const monkeyStaffImg = new Image();
+monkeyStaffImg.src = "assets/pixil-frame-0.png";
+
+const characterDB = {
+  Antimagic: {
+    color: "#1c1c1c",
+    hp: 100,
+    damage: 5,
+    speed: 2.6,
+    weapons: 1,
+    wLen: 75,
+    wWidth: 16,
+    rotSpeed: 0.02,
+    ultName: "BLACK METEORITE",
+    ultColor: "#c0392b",
+    desc: "Asta-Inspired: Spell Erase, Ult Drain & Black Form",
+    ultMax: 2200,
+  },
+  Copycat: {
+    color: "#ffffff",
+    hp: 100,
+    damage: 2.0,
+    speed: 2.5,
+    weapons: 1,
+    wLen: 70,
+    wWidth: 8,
+    rotSpeed: 0.025,
+    ultName: "SWORD DOMAIN",
+    ultColor: "#FF76CE",
+    desc: "Copycat, Ult & Passive Duplicate",
+    ultMax: 1800,
+  },
+  Echoes: {
+    color: "#2ecc71",
+    hp: 100,
+    damage: 0.8,
+    speed: 2.7,
+    weapons: 0,
+    wLen: 0,
+    wWidth: 0,
+    rotSpeed: 0,
+    ultName: "NOISE OVERLOAD",
+    ultColor: "#27ae60",
+    desc: "Sound Mark Traps & Chain Detonation",
+    ultMax: 1600,
+  },
+  Illustrade: {
+    color: "#362F4F",
+    hp: 100,
+    damage: 1.0,
+    speed: 2.3,
+    weapons: 1,
+    wLen: 55,
+    wWidth: 8,
+    rotSpeed: 0.03,
+    ultName: "TYPOGRAPHY SPELL",
+    ultColor: "#222222",
+    desc: "Illustratting Ink trail",
+    ultMax: 1500,
+  },
+  Valkyrie: {
+    color: "#a4c8e1",
+    hp: 100,
+    damage: 1.5,
+    speed: 2.2,
+    weapons: 1,
+    wLen: 65,
+    wWidth: 12,
+    rotSpeed: 0.015,
+    ultName: "VALHALLA",
+    ultColor: "#a4c8e1",
+    desc: "Valhalla Regen Aura",
+    ultMax: 300,
+  },
+  Vessel: {
+    color: "#c0392b",
+    hp: 50,
+    damage: 1.0,
+    speed: 2.4,
+    weapons: 1,
+    wLen: 48,
+    wWidth: 16,
+    rotSpeed: 0.02,
+    ultName: "DETERMINATION",
+    ultColor: "#c0392b",
+    desc: "Ressurection, Low HP",
+    ultMax: 1500,
+  },
+  Juggernaut: {
+    color: "#7f8c8d",
+    hp: 450,
+    damage: 2.5,
+    speed: 1.4,
+    weapons: 2,
+    wLen: 60,
+    wWidth: 18,
+    rotSpeed: 0.01,
+    ultName: "TITAN FORM",
+    ultColor: "#7f8c8d",
+    desc: "Giant Tank",
+    ultMax: 400,
+  },
+  "Monkey King": {
+    color: "#f1c40f",
+    hp: 100,
+    damage: 2.0,
+    speed: 2.6,
+    weapons: 1,
+    wLen: 65,
+    wWidth: 10,
+    rotSpeed: 0.016,
+    ultName: "TRICKSTER CLONE",
+    ultColor: "#f1c40f",
+    desc: "Growing Staff & Clones",
+    ultMax: 350,
+  },
+  Brawler: {
+    color: "#F11A7B",
+    hp: 100,
+    damage: 2.0,
+    speed: 3.0,
+    weapons: 0,
+    wLen: 0,
+    wWidth: 0,
+    rotSpeed: 0,
+    ultName: "GRAVITY ORBIT",
+    ultColor: "#F11A7B",
+    desc: "Handler, Fast Stacker",
+    ultMax: 1800,
+  },
+  Divergent: {
+    color: "#e74c3c",
+    hp: 100,
+    damage: 2.0,
+    speed: 3.0,
+    weapons: 0,
+    wLen: 0,
+    wWidth: 0,
+    rotSpeed: 0,
+    ultName: "BLACK FLASH",
+    ultColor: "#ff0033",
+    desc: "Based on Itadori Yuji.",
+    ultMax: 100,
+  },
+  "Sword Saint": {
+    color: "#34495e",
+    hp: 100,
+    damage: 1.5,
+    speed: 2.8,
+    weapons: 1,
+    wLen: 75,
+    wWidth: 8,
+    rotSpeed: 0.03,
+    ultName: "SPATIAL REND",
+    ultColor: "#ffffff",
+    desc: "Wide Slash, Atk Speed",
+    ultMax: 3000,
+  },
+  Retaliator: {
+    color: "#4a6572",
+    hp: 100,
+    damage: 2.0,
+    speed: 2.1,
+    weapons: 1,
+    wLen: 70,
+    wWidth: 10,
+    rotSpeed: 0,
+    ultName: "RETRIBUTION ZONE",
+    ultColor: "#00d2d3",
+    desc: "Retaliate, Counter Attack",
+    ultMax: 3000,
+  },
+  Stasis: {
+    color: "#8e44ad",
+    hp: 100,
+    damage: 2.2,
+    speed: 2.1,
+    weapons: 0,
+    wLen: 0,
+    wWidth: 0,
+    rotSpeed: 0,
+    ultName: "TIME STOP BARRAGE",
+    ultColor: "#00d2d3",
+    desc: "Time Stop Atk Speed",
+    ultMax: 1500,
+  },
+  "Death Note": {
+    color: "#111111",
+    hp: 100,
+    damage: 0,
+    speed: 2.1,
+    weapons: 0,
+    wLen: 0,
+    wWidth: 0,
+    rotSpeed: 0,
+    ultName: "DEATH SENTENCE",
+    ultColor: "#2c3e50",
+    desc: "Auto hit, Auto kill",
+    ultMax: 4000,
+  },
+  Infinity: {
+    color: "#ffffff",
+    hp: 100,
+    damage: 1.5,
+    speed: 2.8,
+    weapons: 0,
+    wLen: 0,
+    wWidth: 0,
+    rotSpeed: 0,
+    ultName: "UNLIMITED VOID",
+    ultColor: "#4B0082",
+    desc: "Six Eyes, Mugen, Hollow Purple",
+    ultMax: 5000,
+  },
+};
+
+/* ================= KONFIGURASI MAP DENGAN TEMA UI DINAMIS ================= */
+const mapDB = {
+  classic: {
+    name: "Classic Arena",
+    bg: "#f9f8f6",
+    borderColor: "#c9b59c",
+    gridColor: "#efe9e3",
+    containerBg: "#e9e1da",
+    textColor: "#4b4038",
+    textShadow: "none",
+    desc: "Arena klasik dengan warna netral dan lembut di mata.",
+  },
+  shibuya: {
+    name: "Shibuya Night",
+    bg: "#202940",
+    borderColor: "#9a8678",
+    gridColor: "#4b4038",
+    containerBg: "#151b2b",
+    textColor: "#caaA98",
+    textShadow: "none",
+    desc: "Arena malam bernuansa gelap dengan kontras yang lebih tenang.",
+  },
+  shrine: {
+    name: "Jungle Shrine",
+    bg: "#9cb080",
+    borderColor: "#2b5748",
+    gridColor: "#618764",
+    containerBg: "#dce4d3",
+    textColor: "#29483d",
+    textShadow: "none",
+    desc: "Kuil hutan dengan palet hijau alami dan tidak menyilaukan.",
+  },
+  magma: {
+    name: "Magma Pit",
+    bg: "#95271d",
+    borderColor: "#e77b49",
+    gridColor: "#b34a44",
+    containerBg: "#ead0c2",
+    textColor: "#63241e",
+    textShadow: "none",
+    desc: "Kawah magma dengan warna merah hangat tanpa efek neon berlebihan.",
+  },
+};
+
+let currentMap = "classic";
+
+function goToMapSelect() {
+  document.getElementById("selection-screen").style.display = "none";
+  document.getElementById("map-screen").style.display = "flex";
+  renderMapRoster();
+}
+
+function backToCharSelect() {
+  document.getElementById("map-screen").style.display = "none";
+  document.getElementById("selection-screen").style.display = "flex";
+}
+
+function renderMapRoster() {
+  const container = document.getElementById("map-roster");
+  container.innerHTML = "";
+
+  Object.keys(mapDB).forEach((key) => {
+    let m = mapDB[key];
+    let card = document.createElement("div");
+    card.style.cssText = `
+      width: 160px; padding: 14px; border-radius: 10px; text-align: center; cursor: pointer;
+      background: ${currentMap === key ? "#343b46" : "#252b34"};
+      border: 2px solid ${currentMap === key ? m.borderColor : "#48515d"};
+      transition: background 0.2s ease, border-color 0.2s ease;
+      box-sizing: border-box;
+    `;
+    card.innerHTML = `
+      <div style="width: 100%; height: 60px; background: ${m.bg}; border: 1px solid ${m.borderColor}; margin-bottom: 10px; border-radius: 6px;"></div>
+      <div style="font-weight: bold; font-size: 14px; color: #e4e8ed; margin-bottom: 6px;">${m.name}</div>
+      <div style="font-size: 12px; line-height: 1.45; color: #b8c0ca;">${m.desc}</div>
+    `;
+    card.onclick = () => {
+      currentMap = key;
+      renderMapRoster();
+    };
+    container.appendChild(card);
+  });
+}
+
+function drawMapBG() {
+  let m = mapDB[currentMap] || mapDB["classic"];
+  ctx.fillStyle = m.bg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  if (currentMap !== "classic") {
+    ctx.strokeStyle = m.gridColor;
+    ctx.lineWidth = 1;
+    for (let x = 0; x < canvas.width; x += 50) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, canvas.height);
+      ctx.stroke();
+    }
+    for (let y = 0; y < canvas.height; y += 50) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(canvas.width, y);
+      ctx.stroke();
+    }
+  }
+}
+
+function applyMapUITheme() {
+  let m = mapDB[currentMap] || mapDB["classic"];
+  const gameContainer = document.getElementById("game-container");
+  const gameCanvas = document.getElementById("gameCanvas");
+
+  if (gameContainer) gameContainer.style.backgroundColor = m.containerBg;
+  if (gameCanvas) gameCanvas.style.borderColor = m.borderColor;
+
+  const stats1 = document.getElementById("stats1");
+  const stats2 = document.getElementById("stats2");
+
+  if (stats1) {
+    stats1.style.color = m.textColor;
+    stats1.style.textShadow = m.textShadow;
+  }
+  if (stats2) {
+    stats2.style.color = m.textColor;
+    stats2.style.textShadow = m.textShadow;
+  }
+}
+
+let balls = [];
+let projectiles = [];
+let gameState = "menu";
+let p1Choice = "Copycat";
+let p2Choice = "Infinity";
+let effects = [];
+let infinitySkills = [];
+let soundTraps = [];
+let scatteredSwords = [];
+
+class ScatteredSword {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.life = 700;
+    this.angle = Math.random() * Math.PI * 2;
+  }
+  update() {
+    this.life--;
+  }
+  draw() {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+    ctx.fillStyle = "#bdc3c7";
+    ctx.fillRect(-3, -20, 6, 40);
+    ctx.fillStyle = "#7f8c8d";
+    ctx.fillRect(-9, -3, 18, 6);
+    ctx.shadowColor = "#95a5a6";
+    ctx.shadowBlur = 8;
+    ctx.restore();
+  }
+}
+
+class SoundTrap {
+  constructor(x, y, type, owner) {
+    this.x = x;
+    this.y = y;
+    this.type = type;
+    this.owner = owner;
+    this.life = 600;
+    this.radius = 22;
+  }
+  update() {
+    this.life--;
+    balls.forEach((b) => {
+      if (b.team !== this.owner.team && b.hp > 0) {
+        let dist = Math.hypot(b.x - this.x, b.y - this.y);
+        if (dist < b.radius + this.radius) {
+          this.trigger(b);
+          this.life = 0;
+        }
+      }
+    });
+  }
+  trigger(target) {
+    let angle = Math.atan2(target.y - this.y, target.x - this.x);
+    if (this.type === "BOING") {
+      target.vx = Math.cos(angle) * 12;
+      target.vy = Math.sin(angle) * 12;
+      let dmg = target.takeDamage(3.0, this.owner);
+      spawnText("BOING LAUNCH! -" + dmg.toFixed(1), target.x, target.y - 18, "#e84393");
+    } else if (this.type === "HEAT") {
+      target.stunTimer = 30;
+      let dmg = target.takeDamage(3.0, this.owner);
+      spawnText("HEAT BURN! -" + dmg.toFixed(1), target.x, target.y - 18, "#f1c40f");
+    } else if (this.type === "DOKAN") {
+      target.vx = Math.cos(angle) * 8;
+      target.vy = Math.sin(angle) * 8;
+      let dmg = target.takeDamage(5.0, this.owner);
+      spawnText("DOKAN BOOM! -" + dmg.toFixed(1), target.x, target.y - 18, "#e67e22");
+      effects.push({ type: "black_flash", x: this.x, y: this.y, life: 15, maxLife: 15 });
+    }
+  }
+  draw() {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    let colors = { BOING: "#e84393", HEAT: "#f1c40f", DOKAN: "#e67e22" };
+    let col = colors[this.type] || "#27ae60";
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(0,0,0,0.45)";
+    ctx.fill();
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([4, 3]);
+    ctx.stroke();
+    ctx.fillStyle = col;
+    ctx.font = "bold 13px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = "#000";
+    ctx.shadowBlur = 4;
+    ctx.fillText(this.type, 0, 0);
+    ctx.restore();
+  }
+}
+
+class LetterProjectile {
+  constructor(x, y, charStr, target, owner) {
+    this.x = x;
+    this.y = y;
+    this.char = charStr;
+    this.target = target;
+    this.owner = owner;
+    this.speed = 7.5;
+    this.damage = owner.damage * 1.5;
+    this.life = 200;
+  }
+  update() {
+    if (this.target && this.target.hp > 0) {
+      let dx = this.target.x - this.x, dy = this.target.y - this.y;
+      let dist = Math.hypot(dx, dy) || 1;
+      this.x += (dx / dist) * this.speed;
+      this.y += (dy / dist) * this.speed;
+      if (dist < this.target.radius + 12) {
+        let finalDmg = this.target.takeDamage(this.damage, this.owner, true);
+        spawnText("-" + finalDmg.toFixed(1), this.target.x, this.target.y - 12, "#222222");
+        this.life = 0;
+      }
+    } else this.life = 0;
+    this.life--;
+  }
+  draw() {
+    ctx.save();
+    ctx.fillStyle = "#222222";
+    ctx.font = "bold 22px Arial";
+    ctx.shadowColor = "#555555";
+    ctx.shadowBlur = 6;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(this.char, this.x, this.y);
+    ctx.restore();
+  }
+}
+
+class Projectile {
+  constructor(x, y, targetX, targetY, owner, isTimeStopCreated = false) {
+    this.x = x;
+    this.y = y;
+    this.owner = owner;
+    this.pierce = true;
+    this.delayTimer = 22;
+    this.speed = 6.5;
+    this.damage = owner.damage;
+    this.hitTargets = new Set();
+    this.life = 350;
+    this.frozenInTime = isTimeStopCreated;
+    let dx = targetX - x, dy = targetY - y;
+    this.angle = Math.atan2(dy, dx);
+    this.vx = Math.cos(this.angle) * this.speed;
+    this.vy = Math.sin(this.angle) * this.speed;
+  }
+  update() {
+    if (this.frozenInTime) return;
+    if (this.delayTimer > 0) {
+      this.delayTimer--;
+      return;
+    }
+    this.x += this.vx;
+    this.y += this.vy;
+    this.life--;
+    balls.forEach((target) => {
+      if (target !== this.owner && target.team !== this.owner.team && target.hp > 0) {
+        let dist = Math.hypot(target.x - this.x, target.y - this.y);
+        if (dist < target.radius + 10 && !this.hitTargets.has(target)) {
+          let finalDmg = target.takeDamage(this.damage, this.owner, true);
+          target.iFrames = 12;
+          this.hitTargets.add(target);
+          if (this.owner && this.owner.name === "Stasis") {
+            this.owner.atkSpeed += 0.01;
+            this.owner.ultCharge = Math.min(this.owner.ultMax, this.owner.ultCharge + 60);
+            spawnText("+0.01 Spd | -1s CD", this.owner.x, this.owner.y - 28, "#00d2d3");
+          }
+          spawnText("-" + finalDmg.toFixed(1), target.x, target.y - 12, "#00d2d3");
+          effects.push({ type: "slash", x: this.x, y: this.y, life: 10, angle: this.angle });
+          if (!this.pierce) this.life = 0;
+        }
+      }
+    });
+  }
+  draw() {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+    ctx.shadowColor = "#00d2d3";
+    ctx.shadowBlur = this.frozenInTime || this.delayTimer > 0 ? 12 : 5;
+    ctx.fillStyle = "#3d2b56";
+    ctx.fillRect(-12, -3, 9, 6);
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.moveTo(-3, -5);
+    ctx.lineTo(14, 0);
+    ctx.lineTo(-3, 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "#00d2d3";
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+class BlueOrb {
+  constructor(x, y, owner) {
+    this.x = x;
+    this.y = y;
+    this.owner = owner;
+    this.life = 150;
+    this.radius = 100;
+  }
+  update() {
+    this.life--;
+    balls.forEach((b) => {
+      if (b.team !== this.owner.team && b.hp > 0) {
+        let dx = this.x - b.x, dy = this.y - b.y;
+        let dist = Math.hypot(dx, dy) || 1;
+        if (dist < this.radius) {
+          b.vx += (dx / dist) * 0.6;
+          b.vy += (dy / dist) * 0.6;
+          b.vx *= 0.75;
+          b.vy *= 0.75;
+          if (this.life % 20 === 0) {
+            let dmg = b.takeDamage(0.3, this.owner);
+            spawnText("-" + dmg.toFixed(1), b.x, b.y - 12, "#0984e3");
+            this.owner.blueCD = Math.max(0, this.owner.blueCD - 3);
+            this.owner.redCD = Math.max(0, this.owner.redCD - 3);
+          }
+        }
+      }
+    });
+  }
+  draw() {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(0, 168, 255, 0.1)";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, 12 + Math.sin(this.life * 0.2) * 4, 0, Math.PI * 2);
+    ctx.fillStyle = "#0984e3";
+    ctx.shadowColor = "#00a8ff";
+    ctx.shadowBlur = 12;
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+class RedWave {
+  constructor(x, y, target, owner) {
+    this.x = x;
+    this.y = y;
+    this.owner = owner;
+    this.life = 50;
+    let dx = target.x - x, dy = target.y - y;
+    let angle = Math.atan2(dy, dx);
+    this.vx = Math.cos(angle) * 11;
+    this.vy = Math.sin(angle) * 11;
+    this.hitTargets = new Set();
+  }
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.life--;
+    balls.forEach((b) => {
+      if (b.team !== this.owner.team && b.hp > 0 && !this.hitTargets.has(b)) {
+        this.hitTargets.add(b);
+        let dmg = b.takeDamage(3, this.owner);
+        b.vx = this.vx * 1.2;
+        b.vy = this.vy * 1.2;
+        if (b.x < 50 || b.x > canvas.width - 50 || b.y < 50 || b.y > canvas.height - 50) {
+          b.stunTimer = 60;
+          spawnText("WALL STUN!", b.x, b.y - 25, "#e74c3c");
+        }
+        this.owner.blueCD = Math.max(0, this.owner.blueCD - 5);
+        spawnText("-" + dmg.toFixed(1), b.x, b.y - 12, "#d63031");
+      }
+    });
+  }
+  draw() {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, 12, 0, Math.PI * 2);
+    ctx.fillStyle = "#d63031";
+    ctx.shadowColor = "#ff7675";
+    ctx.shadowBlur = 12;
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+class PurpleBeam {
+  constructor(x, y, target, owner, isBoosted) {
+    this.x = x;
+    this.y = y;
+    this.owner = owner;
+    this.life = 40;
+    let dx = target.x - x, dy = target.y - y;
+    this.angle = Math.atan2(dy, dx);
+    this.isBoosted = isBoosted;
+    this.hasDealtDamage = false;
+  }
+  update() {
+    this.life--;
+    if (!this.hasDealtDamage && this.life <= 25) {
+      this.hasDealtDamage = true;
+      balls.forEach((b) => {
+        if (b.team !== this.owner.team && b.hp > 0) {
+          let cp = getClosestPointOnSegment(
+            b,
+            { x: this.x, y: this.y },
+            { x: this.x + Math.cos(this.angle) * 1200, y: this.y + Math.sin(this.angle) * 1200 }
+          );
+          let dist = Math.hypot(b.x - cp.x, b.y - cp.y);
+          if (dist < 40) {
+            let multiplier = this.isBoosted ? 1.5 : 1.0;
+            let trueDamage = 5.0 * multiplier;
+            let actualDmg = b.takeDamage(trueDamage, this.owner);
+            spawnText("PURPLE: -" + actualDmg.toFixed(1), b.x, b.y - 18, "#6c5ce7");
+          }
+        }
+      });
+    }
+  }
+  draw() {
+    let progress = this.life / 40;
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+    ctx.beginPath();
+    ctx.rect(0, -30 * progress, 1200, 60 * progress);
+    ctx.fillStyle = `rgba(108, 92, 231, ${progress})`;
+    ctx.shadowColor = "#a29bfe";
+    ctx.shadowBlur = 16;
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+class Ball {
+  constructor(team, name, x, y, isClone = false) {
+    let stats = characterDB[name] || characterDB["Copycat"];
+    this.team = team;
+    this.name = name;
+    this.isClone = isClone;
+    this.x = x;
+    this.y = y;
+    this.baseRadius = isClone ? 15 : 25;
+    this.radius = this.baseRadius;
+    this.color = stats.color;
+    this.maxHp = isClone ? 80 : stats.hp;
+    this.hp = this.maxHp;
+    this.baseSpeed = stats.speed;
+    this.vx = 0;
+    this.vy = 0;
+
+    this.weapons = stats.weapons;
+    this.baseWLen = isClone ? stats.wLen * 0.6 : stats.wLen;
+    this.wLen = this.baseWLen;
+    this.wWidth = isClone ? stats.wWidth * 0.6 : stats.wWidth;
+    this.angle = Math.random() * Math.PI;
+    this.baseRotSpeed = stats.rotSpeed;
+    this.rotSpeed = stats.rotSpeed;
+    this.damage = stats.damage;
+
+    if (this.name === "Monkey King") {
+      this.staffData = { scale: 1.0 };
+    }
+
+    this.trapTimer = 0;
+    this.atkSpeed = 1.0;
+    this.ultCharge = 0;
+    this.ultMax = stats.ultMax || 400;
+    this.isUltActive = false;
+    this.bonusText = "";
+    this.parryCooldown = 0;
+    this.iFrames = 0;
+    this.visible = true;
+    this.timeStopTimer = 0;
+    this.swingTimer = 0;
+    this.zoneRadius = 140;
+    this.combatTimer = 0;
+    this.shootCooldown = 0;
+    this.stasisUltTimer = 0;
+    this.hasBeenHit = false;
+    this.deathNoteTimer = 0;
+    this.targetToKill = null;
+    this.writingAnimTimer = 0;
+    this.pencilTrails = [];
+    this.illustradeChargeTimer = 0;
+    this.floatingChars = [];
+    this.spellCircleAngle = 0;
+
+    this.copycatPassiveTimer = 0;
+
+    this.bfTarget = Math.random() * 100;
+    this.bfSpeed = 0.4;
+    this.blueCD = 0;
+    this.redCD = 0;
+    this.purpleCD = 0;
+    this.purpleComboTimer = 0;
+    this.mugenCD = 0;
+    this.domainTimer = 0;
+    this.domainDebuffTimer = 0;
+    this.stunTimer = 0;
+  }
+
+  takeDamage(amount, attacker = null, isProjectile = false) {
+    if (this.name === "Illustrade" && this.isUltActive) {
+      spawnText("IMMUNE!", this.x, this.y - 12, "#222222");
+      return 0;
+    }
+    if (this.name === "Infinity") {
+      if (isProjectile && this.mugenCD <= 0) {
+        this.mugenCD = 600;
+        spawnText("LIMITLESS BLOCK!", this.x, this.y - 25, "#ffffff");
+        return 0;
+      }
+      if (!isProjectile) amount *= 0.8;
+    }
+    if (this.domainDebuffTimer > 0) amount *= 1.4;
+
+    let actualDamage = amount;
+    if (this.name === "Retaliator" && attacker && attacker.team !== this.team) {
+      this.combatTimer = 180;
+      this.triggerRetaliation(attacker);
+    }
+    if (this.name === "Vessel") {
+      this.damage += 0.5;
+      spawnText("+0.5 DMG!", this.x, this.y - 25, "#c0392b");
+    }
+
+    if (this.name === "Vessel" && this.hp - actualDamage <= 0 && this.ultCharge >= this.ultMax) {
+      this.hp = this.maxHp;
+      this.ultCharge = 0;
+      this.isUltActive = false;
+      this.bonusText = "";
+      this.iFrames = 60;
+      spawnText("BUT IT REFUSED!", this.x, this.y - 35, "#c0392b");
+      effects.push({ type: "heart_refuse", x: this.x, y: this.y - 10, life: 60, maxLife: 60 });
+      return 0;
+    }
+
+    this.hp -= actualDamage;
+    if (this.name === "Death Note" && !this.hasBeenHit) {
+      this.hasBeenHit = true;
+      this.deathNoteTimer = 4000;
+      this.targetToKill = attacker || balls.find((b) => b.team !== this.team && !b.isClone);
+      spawnText("DEATH NOTE WRITING...", this.x, this.y - 30, "#e74c3c");
+    }
+    return actualDamage;
+  }
+
+  triggerRetaliation(target) {
+    if (!target) return;
+    let attackAngle = Math.atan2(target.y - this.y, target.x - this.x);
+    this.angle = attackAngle;
+    this.swingTimer = 18;
+    this.rotSpeed = 0.45;
+    let dist = Math.hypot(target.x - this.x, target.y - this.y);
+    let currentWLen = this.isUltActive ? this.zoneRadius - this.radius : this.wLen;
+    let maxRange = this.radius + currentWLen + target.radius;
+
+    if (dist <= maxRange) {
+      if (target.iFrames === 0 || this.isUltActive) {
+        let finalDmg = target.takeDamage(this.damage, this);
+        target.iFrames = 15;
+        this.damage = Math.max(2.0, this.damage - 0.8);
+        if (!this.isUltActive) {
+          this.ultCharge = Math.min(this.ultMax, this.ultCharge + 100);
+          spawnText("+100 Ult!", this.x, this.y - 25, "#00d2d3");
+        }
+        spawnText("-" + finalDmg.toFixed(1), target.x, target.y - 12, "#00d2d3");
+        effects.push({ type: "slash", x: (this.x + target.x) / 2, y: (this.y + target.y) / 2, life: 15, angle: attackAngle });
+      }
+    } else {
+      effects.push({
+        type: "slash",
+        x: this.x + Math.cos(attackAngle) * (this.radius + 15),
+        y: this.y + Math.sin(attackAngle) * (this.radius + 15),
+        life: 10,
+        angle: attackAngle,
+      });
+    }
+  }
+
+  getWeaponSegments() {
+    let segs = [];
+    if (this.weapons === 0) return segs;
+
+    if (this.name === "Monkey King") {
+      let scale = this.staffData ? this.staffData.scale : 1.0;
+      let currentHalfLen = (this.radius + this.wLen) * scale;
+      let ang = this.angle;
+      let startX = this.x - Math.cos(ang) * currentHalfLen;
+      let startY = this.y - Math.sin(ang) * currentHalfLen;
+      let endX = this.x + Math.cos(ang) * currentHalfLen;
+      let endY = this.y + Math.sin(ang) * currentHalfLen;
+      segs.push({ p1: { x: startX, y: startY }, p2: { x: endX, y: endY } });
+      return segs;
+    }
+
+    for (let i = 0; i < this.weapons; i++) {
+      let ang = this.angle + ((Math.PI * 2) / this.weapons) * i;
+      let startX = this.x + Math.cos(ang) * this.radius;
+      let startY = this.y + Math.sin(ang) * this.radius;
+      let endX = this.x + Math.cos(ang) * (this.radius + this.wLen);
+      let endY = this.y + Math.sin(ang) * (this.radius + this.wLen);
+      segs.push({ p1: { x: startX, y: startY }, p2: { x: endX, y: endY } });
+    }
+    return segs;
+  }
+
+  draw() {
+    if (!this.visible) return;
+
+    if (this.name === "Copycat") {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius + 6 + Math.sin(Date.now() * 0.01) * 3, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255, 118, 206, 0.25)";
+      ctx.fill();
+      ctx.shadowColor = "#FF76CE";
+      ctx.shadowBlur = 12;
+      ctx.strokeStyle = "rgba(255, 118, 206, 0.8)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (this.name === "Antimagic") {
+      ctx.save();
+      ctx.beginPath();
+      let pulse = Math.sin(Date.now() * 0.01) * 4;
+      ctx.arc(this.x, this.y, this.radius + 8 + pulse, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(192, 57, 43, 0.25)";
+      ctx.fill();
+      ctx.strokeStyle = this.isUltActive ? "#ff0000" : "#c0392b";
+      ctx.lineWidth = this.isUltActive ? 3.5 : 2;
+      ctx.shadowColor = "#e74c3c";
+      ctx.shadowBlur = 12;
+      ctx.stroke();
+
+      if (this.isUltActive) {
+        ctx.fillStyle = "#111111";
+        ctx.beginPath();
+        ctx.moveTo(this.x - 15, this.y - 10);
+        ctx.quadraticCurveTo(this.x - 45, this.y - 45, this.x - 55, this.y - 20);
+        ctx.quadraticCurveTo(this.x - 35, this.y - 15, this.x - 15, this.y + 5);
+        ctx.fill();
+        ctx.strokeStyle = "#e74c3c";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    if (this.name === "Infinity") {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius + 6 + Math.sin(Date.now() * 0.01) * 3, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(108, 92, 231, 0.2)";
+      ctx.fill();
+      ctx.shadowColor = "#6c5ce7";
+      ctx.shadowBlur = 10;
+      ctx.strokeStyle = "rgba(108, 92, 231, 0.6)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (this.name === "Divergent") {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius + 6 + Math.sin(Date.now() * 0.01) * 3, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(0, 168, 255, 0.25)";
+      ctx.fill();
+      ctx.shadowColor = "#00a8ff";
+      ctx.shadowBlur = 12;
+      ctx.strokeStyle = "rgba(0, 168, 255, 0.7)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (this.pencilTrails.length > 1) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(54, 47, 79, 0.75)";
+      ctx.lineWidth = 6;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      for (let i = 0; i < this.pencilTrails.length; i++) {
+        let pt = this.pencilTrails[i];
+        if (i === 0) ctx.moveTo(pt.x, pt.y);
+        else ctx.lineTo(pt.x, pt.y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (this.name === "Death Note" && this.hasBeenHit && this.deathNoteTimer > 0) {
+      ctx.save();
+      let pulse = Math.sin(this.writingAnimTimer * 0.1) * 6;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius + 12 + pulse, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(192, 57, 43, 0.25)";
+      ctx.fill();
+      ctx.strokeStyle = "#e74c3c";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      let bookX = this.x - 22, bookY = this.y - 68, bookW = 44, bookH = 32;
+      ctx.fillStyle = "#111111";
+      ctx.fillRect(bookX, bookY, bookW, bookH);
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1.8;
+      ctx.strokeRect(bookX, bookY, bookW, bookH);
+      ctx.fillStyle = "#e74c3c";
+      ctx.fillRect(bookX + 4, bookY, 3, bookH);
+      ctx.strokeStyle = "#e74c3c";
+      ctx.lineWidth = 1.5;
+      let lineCount = Math.min(5, Math.floor(this.writingAnimTimer / 12) % 6);
+      for (let i = 0; i < lineCount; i++) {
+        ctx.beginPath();
+        ctx.moveTo(bookX + 10, bookY + 6 + i * 5);
+        ctx.lineTo(bookX + 34, bookY + 6 + i * 5);
+        ctx.stroke();
+      }
+      let penX = bookX + 12 + ((this.writingAnimTimer * 1.5) % 22);
+      let penY = bookY + 6 + lineCount * 4.5 + Math.sin(this.writingAnimTimer * 0.3) * 2;
+      ctx.save();
+      ctx.translate(penX, penY);
+      ctx.rotate(-0.4 + Math.sin(this.writingAnimTimer * 0.4) * 0.2);
+      ctx.fillStyle = "#ecf0f1";
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(-6, -18);
+      ctx.lineTo(2, -14);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "#e74c3c";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(3, 4);
+      ctx.stroke();
+      ctx.restore();
+      let targetName = this.targetToKill ? this.targetToKill.name : "TARGET";
+      let seconds = Math.ceil(this.deathNoteTimer / 60);
+      let dots = ".".repeat(1 + (Math.floor(this.writingAnimTimer / 15) % 3));
+      ctx.fillStyle = "#e74c3c";
+      ctx.font = "bold 14px Arial";
+      ctx.textAlign = "center";
+      ctx.shadowColor = "#000";
+      ctx.shadowBlur = 4;
+      ctx.fillText(`WRITING ${targetName.toUpperCase()}${dots}`, this.x, this.y - 75);
+      ctx.fillText(`DEATH IN: ${seconds}s`, this.x, this.y + this.radius + 18);
+      ctx.restore();
+    }
+
+    if (this.name === "Illustrade" && this.isUltActive) {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      this.spellCircleAngle += 0.02;
+      ctx.rotate(this.spellCircleAngle);
+      ctx.strokeStyle = "rgba(34, 34, 34, 0.85)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, 70, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, 50, 0, Math.PI * 2);
+      ctx.setLineDash([6, 6]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        let a = (i * Math.PI) / 3;
+        let rx = Math.cos(a) * 50;
+        let ry = Math.sin(a) * 50;
+        if (i === 0) ctx.moveTo(rx, ry);
+        else ctx.lineTo(rx, ry);
+      }
+      ctx.strokeStyle = "rgba(34, 34, 34, 0.45)";
+      ctx.stroke();
+      ctx.restore();
+      this.floatingChars.forEach((fc) => {
+        ctx.save();
+        ctx.fillStyle = "#222222";
+        ctx.font = "bold 20px Arial";
+        ctx.shadowColor = "#777777";
+        ctx.shadowBlur = 6;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(fc.char, fc.x, fc.y);
+        ctx.restore();
+      });
+    }
+
+    if (this.name === "Retaliator" && this.isUltActive) {
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.zoneRadius, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(0, 210, 211, 0.12)";
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "rgba(0, 210, 211, 0.6)";
+      ctx.setLineDash([8, 6]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    if (this.name === "Monkey King") {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.angle - Math.PI / 4);
+      let scale = this.staffData ? this.staffData.scale : 1.0;
+      let totalLen = (this.radius + this.wLen) * 2 * scale;
+      if (monkeyStaffImg.complete && monkeyStaffImg.naturalWidth !== 0) {
+        ctx.drawImage(monkeyStaffImg, -totalLen / 2, -totalLen / 2, totalLen, totalLen);
+      } else {
+        let segs = this.getWeaponSegments();
+        segs.forEach((seg) => {
+          ctx.beginPath();
+          ctx.moveTo(seg.p1.x - this.x, seg.p1.y - this.y);
+          ctx.lineTo(seg.p2.x - this.x, seg.p2.y - this.y);
+          ctx.lineWidth = this.wWidth * scale;
+          ctx.strokeStyle = "#f1c40f";
+          ctx.lineCap = "round";
+          ctx.stroke();
+        });
+      }
+      ctx.restore();
+    } else {
+      let segs = this.getWeaponSegments();
+      segs.forEach((seg) => {
+        ctx.beginPath();
+        ctx.moveTo(seg.p1.x, seg.p1.y);
+        ctx.lineTo(seg.p2.x, seg.p2.y);
+        ctx.lineWidth = this.wWidth;
+        ctx.strokeStyle = this.isUltActive ? "#f1c40f" : "#444";
+        if (this.name === "Antimagic") ctx.strokeStyle = this.isUltActive ? "#e74c3c" : "#1e1e1e";
+        if (this.name === "Copycat") ctx.strokeStyle = "#b2bec3";
+        if (this.name === "Illustrade") ctx.strokeStyle = "#362F4F";
+        if (this.name === "Vessel") ctx.strokeStyle = "#8b0000";
+        if (this.name === "Valkyrie") ctx.strokeStyle = "#87ceeb";
+        if (this.name === "Retaliator") ctx.strokeStyle = "#00d2d3";
+        ctx.lineCap = "round";
+        ctx.stroke();
+        if (this.name === "Illustrade") {
+          ctx.fillStyle = "#222222";
+          ctx.beginPath();
+          ctx.arc(seg.p2.x, seg.p2.y, 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+    }
+
+    if (this.iFrames > 0 && Math.floor(this.iFrames / 3) % 2 === 0) ctx.fillStyle = "#ffaaaa";
+    else ctx.fillStyle = this.name === "Death Note" || this.name === "Antimagic" ? "#111111" : "#ffffff";
+
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = this.color;
+    ctx.stroke();
+    ctx.fillStyle = this.name === "Death Note" || this.name === "Antimagic" ? "#ffffff" : "#000000";
+    ctx.font = `bold ${this.isClone ? 12 : 20}px Arial`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(Math.floor(this.hp), this.x, this.y);
+
+    if (this.stunTimer > 0 || this.domainDebuffTimer > 0) {
+      ctx.save();
+      let t = Date.now() * 0.01;
+      ctx.strokeStyle = "#f1c40f";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      for (let a = 0; a < Math.PI * 4; a += 0.25) {
+        let r = 3 + a * 2.2;
+        let sx = this.x + Math.cos(a + t) * r;
+        let sy = this.y - this.radius - 14 + Math.sin(a + t) * (r * 0.35);
+        if (a === 0) ctx.moveTo(sx, sy);
+        else ctx.lineTo(sx, sy);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  update() {
+    if (this.name === "Antimagic") {
+      this.stunTimer = 0;
+      this.domainDebuffTimer = 0;
+      let weaponSegs = this.getWeaponSegments();
+
+      for (let i = projectiles.length - 1; i >= 0; i--) {
+        let p = projectiles[i];
+        if (p.owner && p.owner.team !== this.team) {
+          let hitBySword = false;
+          for (let seg of weaponSegs) {
+            let cp = getClosestPointOnSegment({ x: p.x, y: p.y }, seg.p1, seg.p2);
+            let dist = Math.hypot(p.x - cp.x, p.y - cp.y);
+            if (dist < 15 + this.wWidth / 2) {
+              hitBySword = true;
+              break;
+            }
+          }
+          if (hitBySword) {
+            p.life = 0;
+            spawnText("ERASED!", p.x, p.y - 10, "#e74c3c");
+            effects.push({ type: "black_flash", x: p.x, y: p.y, life: 10, maxLife: 10 });
+          }
+        }
+      }
+
+      for (let i = soundTraps.length - 1; i >= 0; i--) {
+        let st = soundTraps[i];
+        if (st.owner && st.owner.team !== this.team) {
+          let hitBySword = false;
+          for (let seg of weaponSegs) {
+            let cp = getClosestPointOnSegment({ x: st.x, y: st.y }, seg.p1, seg.p2);
+            let dist = Math.hypot(st.x - cp.x, st.y - cp.y);
+            if (dist < st.radius + this.wWidth / 2) {
+              hitBySword = true;
+              break;
+            }
+          }
+          if (hitBySword) {
+            soundTraps.splice(i, 1);
+            spawnText("SPELL DISPELLED!", st.x, st.y - 10, "#e74c3c");
+          }
+        }
+      }
+
+      for (let i = infinitySkills.length - 1; i >= 0; i--) {
+        let sk = infinitySkills[i];
+        if (sk.owner && sk.owner.team !== this.team) {
+          let hitBySword = false;
+          for (let seg of weaponSegs) {
+            let cp = getClosestPointOnSegment({ x: sk.x, y: sk.y }, seg.p1, seg.p2);
+            let dist = Math.hypot(sk.x - cp.x, sk.y - cp.y);
+            let skillRadius = sk.radius || 15;
+            if (dist < skillRadius + this.wWidth / 2) {
+              hitBySword = true;
+              break;
+            }
+          }
+          if (hitBySword) {
+            infinitySkills.splice(i, 1);
+            spawnText("MAGIC NULLIFIED!", this.x, this.y - 20, "#e74c3c");
+          }
+        }
+      }
+
+      if (this.isUltActive) {
+        let enemy = balls.find((b) => b.team !== this.team && b.hp > 0);
+        if (enemy) {
+          let dx = enemy.x - this.x, dy = enemy.y - this.y;
+          let dist = Math.hypot(dx, dy) || 1;
+          if (dist > this.radius + enemy.radius + 12) {
+            this.vx += (dx / dist) * 0.8;
+            this.vy += (dy / dist) * 0.8;
+            let speed = Math.hypot(this.vx, this.vy);
+            if (speed > 5.5) {
+              this.vx = (this.vx / speed) * 5.5;
+              this.vy = (this.vy / speed) * 5.5;
+            }
+          }
+          this.rotSpeed = 0.25;
+        }
+      }
+    }
+
+    if (this.name === "Copycat") {
+      this.copycatPassiveTimer++;
+      if (this.copycatPassiveTimer >= 180 && gameState === "playing") {
+        this.copycatPassiveTimer = 0;
+        let enemy = balls.find((b) => b.team !== this.team && b.hp > 0);
+        if (enemy) {
+          let skillType = Math.floor(Math.random() * 6);
+          if (skillType === 0) {
+            enemy.stunTimer = 40;
+            spawnText("COPY: CURSED SPEECH!", enemy.x, enemy.y - 25, "#FF76CE");
+          } else if (skillType === 1) {
+            projectiles.push(new Projectile(this.x, this.y, enemy.x, enemy.y, this, false));
+            spawnText("COPY: TIME SHOT!", this.x, this.y - 25, "#FF76CE");
+          } else if (skillType === 2) {
+            infinitySkills.push(new BlueOrb(enemy.x, enemy.y, this));
+            spawnText("COPY: LAPSE BLUE!", this.x, this.y - 25, "#FF76CE");
+          } else if (skillType === 3) {
+            infinitySkills.push(new RedWave(this.x, this.y, enemy, this));
+            spawnText("COPY: REVERSAL RED!", this.x, this.y - 25, "#FF76CE");
+          } else if (skillType === 4) {
+            let types = ["BOING", "HEAT", "DOKAN"];
+            let chosen = types[Math.floor(Math.random() * types.length)];
+            soundTraps.push(new SoundTrap(enemy.x, enemy.y, chosen, this));
+            spawnText("COPY: SOUND MARK!", enemy.x, enemy.y - 25, "#FF76CE");
+          } else if (skillType === 5) {
+            let finalDmg = enemy.takeDamage(this.damage * 1.5, this);
+            spawnText("COPY: BLACK FLASH! -" + finalDmg.toFixed(1), enemy.x, enemy.y - 25, "#FF76CE");
+            effects.push({ type: "black_flash", x: enemy.x, y: enemy.y, life: 15, maxLife: 15 });
+          }
+        }
+      }
+
+      if (scatteredSwords.length > 0) {
+        for (let i = scatteredSwords.length - 1; i >= 0; i--) {
+          let sw = scatteredSwords[i];
+          let dist = Math.hypot(sw.x - this.x, sw.y - this.y);
+          if (dist < this.radius + 18) {
+            scatteredSwords.splice(i, 1);
+            let enemy = balls.find((b) => b.team !== this.team && b.hp > 0);
+            if (enemy) {
+              let ultType = Math.floor(Math.random() * 8);
+
+              if (ultType === 0) {
+                enemy.stunTimer = 180;
+                enemy.domainDebuffTimer = 180;
+                effects.push({ type: "unlimited_void_dot", target: enemy, owner: this, life: 180, maxLife: 180 });
+                spawnText("[GOJO] UNLIMITED VOID!", enemy.x, enemy.y - 30, "#FF76CE");
+              } else if (ultType === 1) {
+                infinitySkills.push(new PurpleBeam(this.x, this.y, enemy, this, true));
+                spawnText("[GOJO] HOLLOW PURPLE!", this.x, this.y - 30, "#FF76CE");
+              } else if (ultType === 2) {
+                let dx = enemy.x - this.x, dy = enemy.y - this.y;
+                let d = Math.hypot(dx, dy) || 1;
+                this.vx = (dx / d) * 18;
+                this.vy = (dy / d) * 18;
+                enemy.ultCharge = Math.max(0, enemy.ultCharge - 300);
+                let dmg = enemy.takeDamage(5.5, this);
+                spawnText("[ASTA] BLACK METEORITE! -" + dmg.toFixed(1), enemy.x, enemy.y - 30, "#FF76CE");
+                effects.push({ type: "black_flash", x: enemy.x, y: enemy.y, life: 20, maxLife: 20 });
+              } else if (ultType === 3) {
+                enemy.stunTimer = 120;
+                let ang = Math.atan2(enemy.y - this.y, enemy.x - this.x);
+                this.vx = Math.cos(ang) * (this.baseSpeed * 2);
+                this.vy = Math.sin(ang) * (this.baseSpeed * 2);
+                spawnText("[STASIS] TIME STOP BARRAGE!", enemy.x, enemy.y - 30, "#FF76CE");
+              } else if (ultType === 4) {
+                for (let k = 0; k < 5; k++) {
+                  effects.push({
+                    type: "map_slash",
+                    p1: { x: -50, y: Math.random() * canvas.height },
+                    p2: { x: canvas.width + 50, y: Math.random() * canvas.height },
+                    life: 25,
+                  });
+                }
+                let dmg = enemy.takeDamage(4.5, this);
+                spawnText("[SWORD SAINT] SPATIAL REND! -" + dmg.toFixed(1), enemy.x, enemy.y - 30, "#FF76CE");
+              } else if (ultType === 5) {
+                this.hp = Math.min(this.maxHp, this.hp + 35);
+                spawnText("[VALKYRIE] VALHALLA REGEN (+35 HP)!", this.x, this.y - 30, "#FF76CE");
+              } else if (ultType === 6) {
+                let clone = new Ball(this.team, "Copycat", this.x + 30, this.y, true);
+                let ang = Math.random() * Math.PI * 2;
+                clone.vx = Math.cos(ang) * clone.baseSpeed;
+                clone.vy = Math.sin(ang) * clone.baseSpeed;
+                balls.push(clone);
+                spawnText("[MONKEY KING] TRICKSTER CLONE!", this.x, this.y - 30, "#FF76CE");
+              } else if (ultType === 7) {
+                let chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+                for (let c = 0; c < 6; c++) {
+                  let char = chars.charAt(Math.floor(Math.random() * chars.length));
+                  projectiles.push(new LetterProjectile(this.x + (Math.random() * 40 - 20), this.y + (Math.random() * 40 - 20), char, enemy, this));
+                }
+                spawnText("[ILLUSTRADE] TYPOGRAPHY SPELL!", this.x, this.y - 30, "#FF76CE");
+              }
+
+              if (isNaN(this.vx) || isNaN(this.vy) || Math.hypot(this.vx, this.vy) < 0.5) {
+                let randomAng = Math.random() * Math.PI * 2;
+                this.vx = Math.cos(randomAng) * this.baseSpeed;
+                this.vy = Math.sin(randomAng) * this.baseSpeed;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (this.stunTimer > 0) {
+      this.stunTimer--;
+      this.vx = 0;
+      this.vy = 0;
+      if (this.domainDebuffTimer > 0) this.domainDebuffTimer--;
+      if (this.stunTimer === 0) {
+        let ang = Math.random() * Math.PI * 2;
+        this.vx = Math.cos(ang) * this.baseSpeed;
+        this.vy = Math.sin(ang) * this.baseSpeed;
+      }
+      return;
+    }
+
+    if (this.name === "Echoes" && gameState === "playing") {
+      this.trapTimer++;
+      if (this.trapTimer >= 120) {
+        this.trapTimer = 0;
+        let myTraps = soundTraps.filter((t) => t.owner === this);
+        if (myTraps.length >= 4) {
+          let oldest = myTraps[0];
+          let idx = soundTraps.indexOf(oldest);
+          if (idx !== -1) soundTraps.splice(idx, 1);
+        }
+        let types = ["BOING", "HEAT", "DOKAN"];
+        let chosenType = types[Math.floor(Math.random() * types.length)];
+        soundTraps.push(new SoundTrap(this.x, this.y, chosenType, this));
+        spawnText("MARK: " + chosenType, this.x, this.y - 20, "#2ecc71");
+      }
+    }
+
+    if (this.name === "Infinity") {
+      if (this.mugenCD > 0) this.mugenCD--;
+      if (this.blueCD > 0) this.blueCD--;
+      if (this.redCD > 0) this.redCD--;
+      if (this.purpleCD > 0) this.purpleCD--;
+      if (this.purpleComboTimer > 0) this.purpleComboTimer--;
+
+      if (this.isUltActive) {
+        this.domainTimer--;
+        this.vx = 0;
+        this.vy = 0;
+        let domainDmg = 0.5;
+
+        balls.forEach((b) => {
+          if (b.team !== this.team && b.hp > 0) {
+            b.vx = 0;
+            b.vy = 0;
+            b.stunTimer = 5;
+            b.domainDebuffTimer = 10;
+            if (this.domainTimer % 15 === 0) {
+              let dmgDone = b.takeDamage(domainDmg, this);
+              spawnText("-" + dmgDone.toFixed(1), b.x, b.y - 15, "#a29bfe");
+            }
+          }
+        });
+
+        if (this.domainTimer <= 0) {
+          this.isUltActive = false;
+          this.bonusText = "";
+          let ang = Math.random() * Math.PI * 2;
+          this.vx = Math.cos(ang) * this.baseSpeed;
+          this.vy = Math.sin(ang) * this.baseSpeed;
+        }
+      } else {
+        let enemy = balls.find((b) => b.team !== this.team && b.hp > 0);
+        if (enemy) {
+          if (this.purpleCD <= 0 && (this.purpleComboTimer > 0 || Math.random() < 0.008)) {
+            let isBoosted = this.purpleComboTimer > 0;
+            infinitySkills.push(new PurpleBeam(this.x, this.y, enemy, this, isBoosted));
+            this.purpleCD = 900;
+            this.purpleComboTimer = 0;
+            spawnText(isBoosted ? "HOLLOW PURPLE (150%)!" : "HOLLOW PURPLE!", this.x, this.y - 30, "#6c5ce7");
+          } else if (this.blueCD <= 0) {
+            infinitySkills.push(new BlueOrb(enemy.x, enemy.y, this));
+            this.blueCD = 480;
+            this.purpleComboTimer = 120;
+            spawnText("LAPSE: BLUE", this.x, this.y - 30, "#0984e3");
+          } else if (this.redCD <= 0) {
+            infinitySkills.push(new RedWave(this.x, this.y, enemy, this));
+            this.redCD = 600;
+            this.purpleComboTimer = 120;
+            spawnText("REVERSAL: RED", this.x, this.y - 30, "#d63031");
+          }
+        }
+      }
+    }
+
+    if (this.name === "Divergent") {
+      if (Math.abs(this.ultCharge - this.bfTarget) < 2) {
+        this.bfTarget = Math.random() * 100;
+        this.bfSpeed = 0.2 + Math.random() * 0.6;
+      }
+      if (this.ultCharge < this.bfTarget) this.ultCharge = Math.min(100, this.ultCharge + this.bfSpeed);
+      else this.ultCharge = Math.max(0, this.ultCharge - this.bfSpeed);
+    }
+
+    if (this.name === "Retaliator") {
+      if (this.combatTimer > 0) this.combatTimer--;
+      else this.damage += 0.001;
+      let hasEnemyInZone = false;
+      if (this.isUltActive) {
+        this.vx = 0;
+        this.vy = 0;
+        this.wLen = this.zoneRadius - this.radius;
+        balls.forEach((enemy) => {
+          if (enemy.team !== this.team && enemy.hp > 0) {
+            let dist = Math.hypot(enemy.x - this.x, enemy.y - this.y);
+            if (dist <= this.radius + this.zoneRadius + enemy.radius) {
+              hasEnemyInZone = true;
+              if (enemy.iFrames === 0) {
+                let finalDmg = enemy.takeDamage(this.damage, this);
+                enemy.iFrames = 15;
+                this.damage = Math.max(2.0, this.damage - 0.8);
+                spawnText("-" + finalDmg.toFixed(1), enemy.x, enemy.y - 12, "#00d2d3");
+                effects.push({ type: "slash", x: enemy.x, y: enemy.y, life: 12, angle: Math.atan2(enemy.y - this.y, enemy.x - this.x) });
+              }
+            }
+          }
+        });
+        if (hasEnemyInZone) this.rotSpeed = 0.4;
+      }
+      if (this.swingTimer > 0) {
+        this.swingTimer--;
+        if (this.swingTimer <= 0 && (!this.isUltActive || !hasEnemyInZone)) this.rotSpeed = 0;
+      } else if (!this.isUltActive || !hasEnemyInZone) this.rotSpeed = 0;
+    }
+
+    if (this.name === "Illustrade") {
+      let segs = this.getWeaponSegments();
+      if (segs.length > 0) {
+        let tip = segs[0].p2;
+        this.pencilTrails.push({ x: tip.x, y: tip.y, life: 250 });
+      }
+      for (let i = this.pencilTrails.length - 1; i >= 0; i--) {
+        this.pencilTrails[i].life--;
+        if (this.pencilTrails[i].life <= 0) this.pencilTrails.splice(i, 1);
+      }
+      balls.forEach((enemy) => {
+        if (enemy !== this && enemy.team !== this.team && enemy.hp > 0) {
+          let isTouchingInk = this.pencilTrails.some((pt) => Math.hypot(enemy.x - pt.x, enemy.y - pt.y) < enemy.radius + 4);
+          if (isTouchingInk) {
+            if (!enemy.lastInkHitTime || Date.now() - enemy.lastInkHitTime >= 200) {
+              enemy.lastInkHitTime = Date.now();
+              let finalDmg = enemy.takeDamage(this.damage, this);
+              this.damage += 0.01;
+              spawnText("-" + finalDmg.toFixed(2), enemy.x, enemy.y - 12, "#362F4F");
+            }
+          }
+        }
+      });
+
+      if (this.isUltActive) {
+        this.vx = 0;
+        this.vy = 0;
+        this.illustradeChargeTimer--;
+        let targetCount = Math.floor(8 + this.damage * 5);
+        let charsPool = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz";
+        if (this.floatingChars.length < targetCount && Math.random() < 0.25) {
+          let randomChar = charsPool.charAt(Math.floor(Math.random() * charsPool.length));
+          let angle = Math.random() * Math.PI * 2;
+          let dist = 60 + Math.random() * 30;
+          this.floatingChars.push({ char: randomChar, x: this.x + Math.cos(angle) * dist, y: this.y + Math.sin(angle) * dist });
+        }
+        if (this.illustradeChargeTimer <= 0) {
+          let enemy = balls.find((b) => b.team !== this.team && b.hp > 0);
+          if (enemy) this.floatingChars.forEach((fc) => projectiles.push(new LetterProjectile(fc.x, fc.y, fc.char, enemy, this)));
+          this.floatingChars = [];
+          this.isUltActive = false;
+          this.ultCharge = 0;
+          this.bonusText = "";
+          let ang = Math.random() * Math.PI * 2;
+          this.vx = Math.cos(ang) * this.baseSpeed;
+          this.vy = Math.sin(ang) * this.baseSpeed;
+        }
+      }
+    }
+
+    if (this.name === "Death Note") {
+      if (this.hasBeenHit && this.deathNoteTimer > 0) {
+        this.deathNoteTimer--;
+        this.writingAnimTimer++;
+        this.ultCharge = 4000 - this.deathNoteTimer;
+        if (this.deathNoteTimer <= 0) {
+          let target = this.targetToKill || balls.find((b) => b.team !== this.team && b.hp > 0);
+          if (target && target.hp > 0) {
+            target.takeDamage(9999, this);
+            spawnText("HEART ATTACK!", target.x, target.y - 20, "#e74c3c");
+          }
+        }
+      }
+    }
+
+    if (this.name === "Brawler" && this.isUltActive) {
+      let enemy = balls.find((b) => b.team !== this.team && b.hp > 0 && !b.isClone) || balls.find((b) => b.team !== this.team && b.hp > 0);
+      if (enemy) {
+        let dx = enemy.x - this.x, dy = enemy.y - this.y;
+        let dist = Math.hypot(dx, dy) || 1;
+        let ux = dx / dist, uy = dy / dist;
+        this.vx += ux * 0.45 + -uy * 0.45;
+        this.vy += uy * 0.45 + ux * 0.45;
+        let currentSpd = Math.hypot(this.vx, this.vy);
+        if (currentSpd > 5.5) {
+          this.vx = (this.vx / currentSpd) * 5.5;
+          this.vy = (this.vy / currentSpd) * 5.5;
+        }
+      }
+    }
+
+    this.x += this.vx;
+    this.y += this.vy;
+
+    if (this.name === "Stasis") {
+      this.shootCooldown--;
+      if (this.shootCooldown <= 0) {
+        let enemy = balls.find((b) => b.team !== this.team && b.hp > 0);
+        if (enemy) {
+          projectiles.push(new Projectile(this.x, this.y, enemy.x, enemy.y, this, this.isUltActive));
+          let effectiveAtkSpeed = this.isUltActive ? this.atkSpeed * 3 : this.atkSpeed;
+          this.shootCooldown = Math.max(4, 60 / effectiveAtkSpeed);
+        }
+      }
+    }
+
+    this.angle += this.rotSpeed;
+    if (this.parryCooldown > 0) this.parryCooldown--;
+    if (this.iFrames > 0) this.iFrames--;
+
+    let currentSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+    let targetSpeed = this.baseSpeed;
+    if (!this.isUltActive || (this.name !== "Brawler" && this.name !== "Illustrade" && this.name !== "Retaliator" && this.name !== "Antimagic")) {
+      if (currentSpeed > targetSpeed) {
+        this.vx *= 0.92;
+        this.vy *= 0.92;
+      } else if (currentSpeed < targetSpeed && currentSpeed > 0.1) {
+        let ratio = targetSpeed / currentSpeed;
+        this.vx *= ratio;
+        this.vy *= ratio;
+      } else if (currentSpeed <= 0.1) {
+        let ang = Math.random() * Math.PI * 2;
+        this.vx = Math.cos(ang) * targetSpeed;
+        this.vy = Math.sin(ang) * targetSpeed;
+      }
+    }
+
+    if (this.x - this.radius <= 0) {
+      this.x = this.radius;
+      this.vx *= -1;
+    }
+    if (this.x + this.radius >= canvas.width) {
+      this.x = canvas.width - this.radius;
+      this.vx *= -1;
+    }
+    if (this.y - this.radius <= 0) {
+      this.y = this.radius;
+      this.vy *= -1;
+    }
+    if (this.y + this.radius >= canvas.height) {
+      this.y = canvas.height - this.radius;
+      this.vy *= -1;
+    }
+
+    if (gameState === "playing" && !this.isClone && !this.isUltActive && this.name !== "Death Note" && this.name !== "Divergent") {
+      this.ultCharge = Math.min(this.ultMax, this.ultCharge + 1);
+      if (this.ultCharge >= this.ultMax) this.activateUlt();
+    }
+
+    if (this.isUltActive && this.name === "Valkyrie") this.hp = Math.min(this.maxHp, this.hp + 0.4);
+  }
+
+  activateUlt() {
+    this.isUltActive = true;
+    if (this.name === "Vessel") {
+      this.bonusText = "DETERMINED!";
+      return;
+    }
+    this.ultCharge = 0;
+
+    if (this.name === "Antimagic") {
+      this.bonusText = "BLACK METEORITE!";
+      this.wLen = this.baseWLen * 1.5;
+      this.damage = characterDB["Antimagic"].damage * 2;
+      projectiles = projectiles.filter((p) => p.owner && p.owner.team === this.team);
+      spawnText("ANTI-MAGIC SURGE!", this.x, this.y - 30, "#e74c3c");
+    } else if (this.name === "Copycat") {
+      this.bonusText = "SWORD DOMAIN!";
+      scatteredSwords = [];
+      for (let i = 0; i < 8; i++) {
+        let sx = 40 + Math.random() * (canvas.width - 80);
+        let sy = 40 + Math.random() * (canvas.height - 80);
+        scatteredSwords.push(new ScatteredSword(sx, sy));
+      }
+    } else if (this.name === "Echoes") {
+      this.bonusText = "NOISE OVERLOAD!";
+      let enemy = balls.find((b) => b.team !== this.team && b.hp > 0 && !b.isClone) || balls.find((b) => b.team !== this.team && b.hp > 0);
+      if (enemy) {
+        let types = ["BOING", "HEAT", "DOKAN"];
+        for (let i = 0; i < 4; i++) {
+          let ang = (i * Math.PI * 2) / 3;
+          let tx = Math.max(30, Math.min(canvas.width - 30, enemy.x + Math.cos(ang) * 45));
+          let ty = Math.max(30, Math.min(canvas.height - 30, enemy.y + Math.sin(ang) * 45));
+          soundTraps.push(new SoundTrap(tx, ty, types[i % types.length], this));
+        }
+        setTimeout(() => {
+          for (let i = soundTraps.length - 1; i >= 0; i--) {
+            let trap = soundTraps[i];
+            if (trap.owner === this) {
+              if (enemy && enemy.hp > 0) trap.trigger(enemy);
+              soundTraps.splice(i, 1);
+            }
+          }
+          this.isUltActive = false;
+          this.bonusText = "";
+        }, 250);
+      } else {
+        this.isUltActive = false;
+      }
+    } else if (this.name === "Infinity") {
+      this.bonusText = "UNLIMITED VOID!";
+      this.domainTimer = 240;
+      this.blueCD = 0;
+      this.redCD = 0;
+    } else if (this.name === "Illustrade") {
+      this.bonusText = "SPELL CHARGING...";
+      this.illustradeChargeTimer = 180;
+      this.floatingChars = [];
+    } else if (this.name === "Juggernaut") {
+      this.radius *= 1.4;
+      this.wLen *= 1.4;
+      this.bonusText = "TITAN MODE!";
+    } else if (this.name === "Brawler") {
+      this.bonusText = "GRAVITY ORBIT!";
+    } else if (this.name === "Retaliator") {
+      this.bonusText = "RETRIBUTION ZONE!";
+      this.wLen = this.zoneRadius - this.radius;
+    } else if (this.name === "Monkey King") {
+      this.bonusText = "CLONES OUT!";
+      for (let i = 0; i < 2; i++) {
+        let clone = new Ball(this.team, this.name, this.x + (i === 0 ? 35 : -35), this.y, true);
+        clone.staffData = this.staffData;
+        let ang = Math.random() * Math.PI * 2;
+        clone.vx = Math.cos(ang) * clone.baseSpeed;
+        clone.vy = Math.sin(ang) * clone.baseSpeed;
+        balls.push(clone);
+      }
+    } else if (this.name === "Sword Saint") {
+      this.bonusText = "SPATIAL REND!";
+      gameState = "timestop";
+      this.visible = false;
+      this.timeStopTimer = 180;
+    } else if (this.name === "Stasis") {
+      this.bonusText = "3X ATK SPEED TIME STOP!";
+      this.stasisUltTimer = 210;
+    } else if (this.name === "Valkyrie") this.bonusText = "REGEN!";
+
+    if (this.name !== "Sword Saint" && this.name !== "Stasis" && this.name !== "Illustrade" && this.name !== "Infinity" && this.name !== "Echoes") {
+      let ultDuration = this.name === "Brawler" ? 1000 : this.name === "Antimagic" ? 2000 : 5000;
+      setTimeout(() => {
+        this.isUltActive = false;
+        this.ultCharge = 0;
+        this.bonusText = "";
+        this.radius = this.baseRadius;
+        this.wLen = this.baseWLen;
+        if (this.name === "Antimagic") {
+          this.damage = characterDB["Antimagic"].damage;
+          this.rotSpeed = characterDB["Antimagic"].rotSpeed;
+        }
+        if (this.name === "Retaliator" || this.name === "Brawler") {
+          let ang = Math.random() * Math.PI * 2;
+          this.vx = Math.cos(ang) * this.baseSpeed;
+          this.vy = Math.sin(ang) * this.baseSpeed;
+          this.rotSpeed = 0;
+        }
+      }, ultDuration);
+    }
+  }
+}
+
+function spawnText(text, x, y, color) {
+  effects.push({ text: text, x: x, y: y, life: 30, color: color });
+}
+
+function triggerSwordSaintEffect(attacker, defender) {
+  if (attacker.name === "Sword Saint") {
+    attacker.atkSpeed += 0.5;
+    attacker.rotSpeed = attacker.baseRotSpeed * attacker.atkSpeed;
+    spawnText("+0.5 Atk Spd!", attacker.x, attacker.y - 25, "#3498db");
+    for (let k = 1; k <= 3; k++) {
+      effects.push({
+        type: "swordsaint_aftereffect",
+        target: defender,
+        owner: attacker,
+        delay: k * 7,
+        damage: 0.5,
+        x: defender.x,
+        y: defender.y,
+        angle: attacker.angle + (k - 2) * 0.4,
+        applied: false,
+        life: 14,
+        maxLife: 14,
+      });
+    }
+  }
+}
+
+function drawUnlimitedVoidBG() {
+  ctx.save();
+  ctx.fillStyle = "#030108";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  let cx = canvas.width / 2;
+  let cy = canvas.height / 2;
+  let time = Date.now() * 0.0025;
+
+  let grad = ctx.createRadialGradient(cx, cy, 15, cx, cy, 240);
+  grad.addColorStop(0, "#ffffff");
+  grad.addColorStop(0.12, "rgba(162, 155, 254, 0.9)");
+  grad.addColorStop(0.35, "rgba(108, 92, 231, 0.7)");
+  grad.addColorStop(0.7, "rgba(75, 0, 130, 0.5)");
+  grad.addColorStop(1, "rgba(3, 1, 8, 0.95)");
+
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+  ctx.lineWidth = 1.5;
+  let rays = 18;
+  for (let i = 0; i < rays; i++) {
+    let ang = (i * Math.PI * 2) / rays + time * 0.3;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(ang) * 20, cy + Math.sin(ang) * 20);
+    ctx.lineTo(cx + Math.cos(ang) * 320, cy + Math.sin(ang) * 320);
+    ctx.stroke();
+  }
+
+  for (let r = 1; r <= 3; r++) {
+    let radius = ((time * 50 + r * 65) % 220) + 15;
+    let alpha = 1 - radius / 230;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(162, 155, 254, ${alpha * 0.8})`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = "rgba(255, 255, 255, 0.22)";
+  ctx.font = "bold 26px Arial";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("無 量 空 處", cx, cy + 180);
+  ctx.restore();
+}
+
+function checkPhysicsAndHits() {
+  for (let i = 0; i < balls.length; i++) {
+    let A = balls[i];
+    for (let j = i + 1; j < balls.length; j++) {
+      let B = balls[j];
+      let dx = B.x - A.x, dy = B.y - A.y;
+      let dist = Math.sqrt(dx * dx + dy * dy);
+      let isEnemy = A.team !== B.team;
+      let aCanParry = !(A.name === "Retaliator" && A.isUltActive);
+      let bCanParry = !(B.name === "Retaliator" && B.isUltActive);
+
+      if (isEnemy && A.weapons > 0 && B.weapons > 0 && A.parryCooldown === 0 && B.parryCooldown === 0 && aCanParry && bCanParry) {
+        let parryHit = false;
+        for (let sa of A.getWeaponSegments()) {
+          for (let sb of B.getWeaponSegments()) {
+            if (intersect(sa.p1, sa.p2, sb.p1, sb.p2)) {
+              parryHit = true;
+              break;
+            }
+          }
+          if (parryHit) break;
+        }
+        if (parryHit) {
+          A.rotSpeed *= -1;
+          B.rotSpeed *= -1;
+          let nx = dx / (dist || 1), ny = dy / (dist || 1);
+          A.vx = -nx * 5;
+          A.vy = -ny * 5;
+          B.vx = nx * 5;
+          B.vy = ny * 5;
+          A.parryCooldown = 18;
+          B.parryCooldown = 18;
+          spawnText("PARRY!", (A.x + B.x) / 2, (A.y + B.y) / 2, "#f1c40f");
+          continue;
+        }
+      }
+
+      if (isEnemy) {
+        if (A.weapons > 0 && B.iFrames === 0 && A.name !== "Retaliator" && A.name !== "Illustrade") {
+          for (let sa of A.getWeaponSegments()) {
+            let cp = getClosestPointOnSegment({ x: B.x, y: B.y }, sa.p1, sa.p2);
+            let cDx = B.x - cp.x, cDy = B.y - cp.y, cDist = Math.sqrt(cDx * cDx + cDy * cDy);
+            if (cDist < B.radius) {
+              let overlap = B.radius - cDist;
+              let nx = cDist > 0 ? cDx / cDist : 1, ny = cDist > 0 ? cDy / cDist : 0;
+              B.x += nx * overlap;
+              B.y += ny * overlap;
+              B.vx *= -1;
+              B.vy *= -1;
+              A.rotSpeed *= -1;
+              let finalDmg = B.takeDamage(A.damage, A);
+              B.iFrames = 60;
+
+              if (A.name === "Antimagic") {
+                B.ultCharge = Math.max(0, B.ultCharge - 200);
+                spawnText("ULT ERASED (-200)!", B.x, B.y - 25, "#e74c3c");
+                effects.push({ type: "black_flash", x: B.x, y: B.y, life: 15, maxLife: 15 });
+              }
+
+              if (A.name === "Monkey King" && A.staffData) {
+                if (A.staffData.scale < 3.0) {
+                  A.staffData.scale = Math.min(3.0, A.staffData.scale + 0.12);
+                  spawnText("+STAFF GROW!", A.x, A.y - 25, "#f1c40f");
+                } else {
+                  spawnText("MAX SIZE (3X)!", A.x, A.y - 25, "#f1c40f");
+                }
+              }
+
+              if (A.name === "Vessel") {
+                A.damage += 0.5;
+                A.ultCharge = Math.min(A.ultMax, A.ultCharge + 50);
+                spawnText("+0.5 DMG | +0.5s ULT", A.x, A.y - 25, "#c0392b");
+              }
+              if ((A.name === "Sword Saint" || A.name === "Retaliator") && !A.isUltActive) {
+                A.ultCharge = Math.min(A.ultMax, A.ultCharge + 100);
+                spawnText("+100 Ult!", A.x, A.y - 25, A.name === "Sword Saint" ? "#ffffff" : "#00d2d3");
+              }
+              triggerSwordSaintEffect(A, B);
+              spawnText("-" + finalDmg.toFixed(1), B.x, B.y - 12, "#e74c3c");
+              break;
+            }
+          }
+        }
+
+        if (B.weapons > 0 && A.iFrames === 0 && B.name !== "Retaliator" && B.name !== "Illustrade") {
+          for (let sb of B.getWeaponSegments()) {
+            let cp = getClosestPointOnSegment({ x: A.x, y: A.y }, sb.p1, sb.p2);
+            let cDx = A.x - cp.x, cDy = A.y - cp.y, cDist = Math.sqrt(cDx * cDx + cDy * cDy);
+            if (cDist < A.radius) {
+              let overlap = A.radius - cDist;
+              let nx = cDist > 0 ? cDx / cDist : 1, ny = cDist > 0 ? cDy / cDist : 0;
+              A.x += nx * overlap;
+              A.y += ny * overlap;
+              A.vx *= -1;
+              A.vy *= -1;
+              B.rotSpeed *= -1;
+              let finalDmg = A.takeDamage(B.damage, B);
+              A.iFrames = 60;
+
+              if (B.name === "Antimagic") {
+                A.ultCharge = Math.max(0, A.ultCharge - 200);
+                spawnText("ULT ERASED (-200)!", A.x, A.y - 25, "#e74c3c");
+                effects.push({ type: "black_flash", x: A.x, y: A.y, life: 15, maxLife: 15 });
+              }
+
+              if (B.name === "Monkey King" && B.staffData) {
+                if (B.staffData.scale < 3.0) {
+                  B.staffData.scale = Math.min(3.0, B.staffData.scale + 0.12);
+                  spawnText("+STAFF GROW!", B.x, B.y - 25, "#f1c40f");
+                } else {
+                  spawnText("MAX SIZE (3X)!", B.x, B.y - 25, "#f1c40f");
+                }
+              }
+
+              if (B.name === "Vessel") {
+                B.damage += 0.5;
+                B.ultCharge = Math.min(B.ultMax, B.ultCharge + 50);
+                spawnText("+0.5 DMG | +0.5s ULT", B.x, B.y - 25, "#c0392b");
+              }
+              if ((B.name === "Sword Saint" || B.name === "Retaliator") && !B.isUltActive) {
+                B.ultCharge = Math.min(B.ultMax, B.ultCharge + 100);
+                spawnText("+100 Ult!", B.x, B.y - 25, B.name === "Sword Saint" ? "#ffffff" : "#00d2d3");
+              }
+              triggerSwordSaintEffect(B, A);
+              spawnText("-" + finalDmg.toFixed(1), A.x, A.y - 12, "#e74c3c");
+              break;
+            }
+          }
+        }
+      }
+
+      if (dist < A.radius + B.radius) {
+        let overlap = (A.radius + B.radius - dist) / 2;
+        let nx = dx / (dist || 1), ny = dy / (dist || 1);
+        A.x -= nx * overlap;
+        A.y -= ny * overlap;
+        B.x += nx * overlap;
+        B.y += ny * overlap;
+        let tempVx = A.vx, tempVy = A.vy;
+        A.vx = B.vx;
+        A.vy = B.vy;
+        B.vx = tempVx;
+        B.vy = tempVy;
+
+        if (isEnemy) {
+          if (A.weapons === 0 && B.iFrames === 0 && (A.name === "Brawler" || A.name === "Divergent" || A.name === "Infinity" || A.name === "Echoes")) {
+            let isBlackFlash = false, hitDmg = A.damage;
+            if (A.name === "Divergent") {
+              if (Math.random() < A.ultCharge / 100) {
+                isBlackFlash = true;
+                hitDmg *= 3.5;
+              }
+              A.damage += 0.5;
+            } else if (A.name === "Brawler") A.damage += 1.0;
+            let finalDmg = B.takeDamage(hitDmg, A);
+            B.iFrames = A.isUltActive ? 12 : 30;
+            if (A.name === "Divergent") {
+              if (isBlackFlash) {
+                spawnText("BLACK FLASH!!", B.x, B.y - 32, "#ff0033");
+                spawnText("-" + finalDmg.toFixed(1), B.x, B.y - 12, "#ff0033");
+                effects.push({ type: "black_flash", x: (A.x + B.x) / 2, y: (A.y + B.y) / 2, life: 25, maxLife: 25 });
+              } else {
+                spawnText("-" + finalDmg.toFixed(1), B.x, B.y - 12, "#00a8ff");
+                effects.push({ type: "cursed_energy", x: (A.x + B.x) / 2, y: (A.y + B.y) / 2, life: 18, maxLife: 18 });
+              }
+            } else spawnText("-" + finalDmg.toFixed(1), B.x, B.y - 12, "#e74c3c");
+          }
+
+          if (B.weapons === 0 && A.iFrames === 0 && (B.name === "Brawler" || B.name === "Divergent" || B.name === "Infinity" || B.name === "Echoes")) {
+            let isBlackFlash = false, hitDmg = B.damage;
+            if (B.name === "Divergent") {
+              if (Math.random() < B.ultCharge / 100) {
+                isBlackFlash = true;
+                hitDmg *= 5;
+              }
+              B.damage += 0.5;
+            } else if (B.name === "Brawler") B.damage += 1.0;
+            let finalDmg = A.takeDamage(hitDmg, B);
+            A.iFrames = B.isUltActive ? 12 : 30;
+            if (B.name === "Divergent") {
+              if (isBlackFlash) {
+                spawnText("BLACK FLASH!!", A.x, A.y - 32, "#ff0033");
+                spawnText("-" + finalDmg.toFixed(1), A.x, A.y - 12, "#ff0033");
+                effects.push({ type: "black_flash", x: (A.x + B.x) / 2, y: (A.y + B.y) / 2, life: 25, maxLife: 25 });
+              } else {
+                spawnText("-" + finalDmg.toFixed(1), A.x, A.y - 12, "#00a8ff");
+                effects.push({ type: "cursed_energy", x: (A.x + B.x) / 2, y: (A.y + B.y) / 2, life: 18, maxLife: 18 });
+              }
+            } else spawnText("-" + finalDmg.toFixed(1), A.x, A.y - 12, "#e74c3c");
+          }
+        }
+      }
+    }
+  }
+}
+
+function ccw(A, B, C) {
+  return (C.y - A.y) * (B.x - A.x) > (B.y - A.y) * (C.x - A.x);
+}
+function intersect(p1, q1, p2, q2) {
+  return ccw(p1, p2, q2) !== ccw(q1, p2, q2) && ccw(p1, q1, p2) !== ccw(p1, q1, q2);
+}
+function dist2(v, w) {
+  return (v.x - w.x) ** 2 + (v.y - w.y) ** 2;
+}
+function getClosestPointOnSegment(p, v, w) {
+  let l2 = dist2(v, w);
+  if (l2 === 0) return { x: v.x, y: v.y };
+  let t = Math.max(0, Math.min(1, ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2));
+  return { x: v.x + t * (w.x - v.x), y: v.y + t * (w.y - v.y) };
+}
+
+function getCharSpecificStats(p) {
+  let lines = [];
+  lines.push(`HP: ${Math.max(0, Math.floor(p.hp))}/${p.maxHp}`);
+  switch (p.name) {
+    case "Antimagic":
+      lines.push(`Demon Blade Dmg: ${p.damage.toFixed(1)}`);
+      lines.push(`Anti-Magic: Sword Dispel`);
+      lines.push(`Status: ${p.isUltActive ? "BLACK FORM" : "Ready"}`);
+      break;
+    case "Copycat":
+      lines.push(`Katana Dmg: ${p.damage.toFixed(1)}`);
+      lines.push(`Passive Copy: ${Math.max(0, 3.0 - p.copycatPassiveTimer / 60).toFixed(1)}s`);
+      lines.push(`Status: ${p.isUltActive ? "SWORD DOMAIN" : "Ready"}`);
+      break;
+    case "Echoes":
+      let myTrapCount = soundTraps.filter((t) => t.owner === p).length;
+      lines.push(`Body Dmg: ${p.damage.toFixed(1)}`);
+      lines.push(`Active Traps: ${myTrapCount}/4`);
+      lines.push(`Next Trap: ${Math.max(0, Math.ceil((120 - p.trapTimer) / 60)).toFixed(1)}s`);
+      break;
+    case "Infinity":
+      lines.push(`Mugen: ${p.mugenCD <= 0 ? "READY" : Math.ceil(p.mugenCD / 60) + "s"}`);
+      if (p.isUltActive) lines.push(`Unlimited Void: ACTIVE`);
+      else lines.push(`Blue: ${Math.ceil(p.blueCD / 60)}s | Red: ${Math.ceil(p.redCD / 60)}s | Purp: ${Math.ceil(p.purpleCD / 60)}s`);
+      break;
+    case "Divergent":
+      lines.push(`Dmg: ${p.damage.toFixed(1)}`);
+      lines.push(`BF Chance: ${Math.floor(p.ultCharge)}%`);
+      break;
+    case "Sword Saint":
+      lines.push(`Atk Spd: ${p.atkSpeed.toFixed(1)}x`);
+      lines.push(`Dmg: ${p.damage.toFixed(2)}`);
+      break;
+    case "Stasis":
+      let effSpd = p.isUltActive ? p.atkSpeed * 3 : p.atkSpeed;
+      lines.push(`Atk Spd: ${effSpd.toFixed(2)}x`);
+      lines.push(`Rate: ${(60 / Math.max(4, 60 / effSpd)).toFixed(1)} /s`);
+      break;
+    case "Retaliator":
+      lines.push(`Retaliate Dmg: ${p.damage.toFixed(1)}`);
+      lines.push(`Status: ${p.combatTimer > 0 ? "In Combat" : "Retaliating"}`);
+      break;
+    case "Vessel":
+      lines.push(`Dmg: ${p.damage.toFixed(1)} (+${(p.damage - 1.0).toFixed(1)})`);
+      lines.push(`Refusal: ${p.ultCharge >= p.ultMax ? "READY" : "Charging"}`);
+      break;
+    case "Death Note":
+      if (p.hasBeenHit) {
+        lines.push(`Target: ${p.targetToKill ? p.targetToKill.name : "Target"}`);
+        lines.push(`Death In: ${Math.ceil(p.deathNoteTimer / 60)}s`);
+      } else lines.push(`Status: Waiting Hit`);
+      break;
+    case "Monkey King":
+      lines.push(`Dmg: ${p.damage.toFixed(1)}`);
+      lines.push(`Staff Size: ${p.staffData ? p.staffData.scale.toFixed(2) : "1.00"}x / 3.00x`);
+      lines.push(`Clones Active: ${balls.filter((b) => b.team === p.team && b.isClone).length}`);
+      break;
+    case "Brawler":
+      lines.push(`Hit Stack Dmg: ${p.damage.toFixed(1)}`);
+      break;
+    case "Illustrade":
+      lines.push(`Ink Dmg: ${p.damage.toFixed(2)}`);
+      if (p.isUltActive) lines.push(`Runic Storm: ${p.floatingChars.length} Runes`);
+      break;
+    case "Juggernaut":
+      lines.push(`Gada Dmg: ${p.damage.toFixed(1)}`);
+      lines.push(`Form: ${p.isUltActive ? "TITAN FORM" : "Normal"}`);
+      break;
+    case "Valkyrie":
+      lines.push(`Sword Dmg: ${p.damage.toFixed(1)}`);
+      if (p.isUltActive) lines.push(`Valhalla Regen: ACTIVE`);
+      break;
+    default:
+      lines.push(`Dmg: ${p.damage.toFixed(2)}`);
+  }
+  if (p.bonusText && p.name !== "Death Note")
+    lines.push(`<span style="color:#00d2d3; font-weight:bold">${p.bonusText}</span>`);
+  return lines.join("<br>");
+}
+
+function updateUI() {
+  let p1 = balls.find((b) => b.team === 1 && !b.isClone),
+    p2 = balls.find((b) => b.team === 2 && !b.isClone);
+  if (p1) {
+    document.getElementById("barFill1").style.width = (p1.ultCharge / p1.ultMax) * 100 + "%";
+    document.getElementById("stats1").innerHTML = getCharSpecificStats(p1);
+  }
+  if (p2) {
+    document.getElementById("barFill2").style.width = (p2.ultCharge / p2.ultMax) * 100 + "%";
+    document.getElementById("stats2").innerHTML = getCharSpecificStats(p2);
+  }
+}
+
+function gameLoop() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawMapBG();
+
+  let domainCaster = balls.find((b) => b.name === "Infinity" && b.isUltActive);
+  if (domainCaster) {
+    drawUnlimitedVoidBG();
+  }
+
+  let stasisCaster = balls.find((b) => b.name === "Stasis" && b.isUltActive);
+
+  if (stasisCaster && gameState === "playing") {
+    ctx.fillStyle = "rgba(10, 15, 30, 0.45)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    stasisCaster.stasisUltTimer--;
+    stasisCaster.update();
+    if (stasisCaster.stasisUltTimer <= 0) {
+      stasisCaster.isUltActive = false;
+      stasisCaster.ultCharge = 0;
+      stasisCaster.bonusText = "";
+      projectiles.forEach((p) => {
+        if (p.owner === stasisCaster) p.frozenInTime = false;
+      });
+    }
+  } else if (gameState === "timestop") {
+    ctx.fillStyle = "rgba(40, 40, 45, 0.8)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    let caster = balls.find((b) => b.name === "Sword Saint" && b.isUltActive);
+    if (caster) {
+      caster.timeStopTimer--;
+      if (caster.timeStopTimer % 10 === 0) {
+        effects.push({
+          type: "map_slash",
+          p1: { x: -50, y: Math.random() * canvas.height },
+          p2: { x: canvas.width + 50, y: Math.random() * canvas.height },
+          life: 20,
+        });
+        balls.forEach((b) => {
+          if (b.team !== caster.team && b.hp > 0) {
+            let finalDmg = b.takeDamage(2, caster);
+            spawnText("-" + finalDmg.toFixed(1), b.x, b.y + (Math.random() * 30 - 15), "#ffffff");
+          }
+        });
+      }
+      if (caster.timeStopTimer <= 0) {
+        caster.visible = true;
+        caster.isUltActive = false;
+        caster.ultCharge = 0;
+        caster.bonusText = "";
+        gameState = "playing";
+      }
+    }
+  } else if (gameState === "playing") {
+    balls.forEach((b) => b.update());
+    checkPhysicsAndHits();
+  }
+
+  for (let i = scatteredSwords.length - 1; i >= 0; i--) {
+    if (gameState === "playing") scatteredSwords[i].update();
+    scatteredSwords[i].draw();
+    if (scatteredSwords[i].life <= 0) scatteredSwords.splice(i, 1);
+  }
+
+  for (let i = soundTraps.length - 1; i >= 0; i--) {
+    if (gameState === "playing") soundTraps[i].update();
+    soundTraps[i].draw();
+    if (soundTraps[i].life <= 0) soundTraps.splice(i, 1);
+  }
+
+  for (let i = infinitySkills.length - 1; i >= 0; i--) {
+    if (gameState === "playing") infinitySkills[i].update();
+    infinitySkills[i].draw();
+    if (infinitySkills[i].life <= 0) infinitySkills.splice(i, 1);
+  }
+
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    let p = projectiles[i];
+    if (gameState === "playing" || (stasisCaster && p.owner === stasisCaster)) p.update();
+    p.draw();
+    if (p.life <= 0) projectiles.splice(i, 1);
+  }
+
+  for (let i = balls.length - 1; i >= 0; i--) {
+    if (balls[i].hp <= 0) balls.splice(i, 1);
+    else balls[i].draw();
+  }
+
+  for (let i = effects.length - 1; i >= 0; i--) {
+    let ef = effects[i];
+    if (ef.type === "unlimited_void_dot") {
+      if (ef.target && ef.target.hp > 0) {
+        if (ef.life % 20 === 0) {
+          let dmg = ef.target.takeDamage(0.6, ef.owner);
+          spawnText("-" + dmg.toFixed(1), ef.target.x + (Math.random() * 20 - 10), ef.target.y - 15, "#a29bfe");
+        }
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(ef.target.x, ef.target.y, ef.target.radius + 12 + Math.sin(ef.life * 0.2) * 4, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(162, 155, 254, 0.2)";
+        ctx.fill();
+        ctx.strokeStyle = "#a29bfe";
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = "#6c5ce7";
+        ctx.shadowBlur = 10;
+        ctx.stroke();
+        ctx.restore();
+      }
+      ef.life--;
+    } else if (ef.type === "cursed_energy") {
+      ctx.save();
+      let progress = 1 - ef.life / ef.maxLife, radius = 15 + progress * 25;
+      ctx.translate(ef.x, ef.y);
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(0, 168, 255, ${0.45 * (1 - progress)})`;
+      ctx.fill();
+      ctx.strokeStyle = `rgba(0, 210, 255, ${1 - progress})`;
+      ctx.lineWidth = 3;
+      for (let a = 0; a < 6; a++) {
+        let ang = (a * Math.PI) / 3 + progress * 2;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(ang) * 5, Math.sin(ang) * 5);
+        ctx.lineTo(Math.cos(ang) * (radius + 5), Math.sin(ang) * (radius + 5));
+        ctx.stroke();
+      }
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "black_flash") {
+      ctx.save();
+      let progress = 1 - ef.life / ef.maxLife;
+      ctx.translate(ef.x, ef.y);
+      ctx.beginPath();
+      ctx.arc(0, 0, 38 * (1 - progress * 0.4), 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(30, 0, 0, ${0.65 * (1 - progress)})`;
+      ctx.fill();
+      ctx.shadowColor = "#ff0033";
+      ctx.shadowBlur = 16;
+      for (let b = 0; b < 8; b++) {
+        let angle = (b * Math.PI * 2) / 8 + Math.sin(ef.life) * 0.25, len = 42 + Math.random() * 28;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        for (let s = 1; s <= 4; s++) {
+          let dist = (len / 4) * s, perp = (Math.random() - 0.5) * 16;
+          ctx.lineTo(Math.cos(angle) * dist - Math.sin(angle) * perp, Math.sin(angle) * dist + Math.cos(angle) * perp);
+        }
+        ctx.strokeStyle = "#ff0033";
+        ctx.lineWidth = 6 * (1 - progress);
+        ctx.stroke();
+        ctx.strokeStyle = "#000000";
+        ctx.lineWidth = 2.5 * (1 - progress);
+        ctx.stroke();
+      }
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "swordsaint_aftereffect") {
+      if (ef.delay > 0) {
+        ef.delay--;
+        if (ef.target && ef.target.hp > 0) {
+          ef.x = ef.target.x;
+          ef.y = ef.target.y;
+        }
+      } else {
+        if (!ef.applied) {
+          ef.applied = true;
+          if (ef.target && ef.target.hp > 0) {
+            let actualDmg = ef.target.takeDamage(ef.damage, ef.owner);
+            spawnText("-" + actualDmg.toFixed(1), ef.target.x + (Math.random() * 24 - 12), ef.target.y - 10, "#7f8c8d");
+          }
+        }
+        ctx.save();
+        ctx.translate(ef.x, ef.y);
+        ctx.rotate(ef.angle);
+        let progress = 1 - ef.life / ef.maxLife;
+        ctx.fillStyle = `rgba(180, 185, 195, ${0.55 * (1 - progress)})`;
+        for (let b = 0; b < 4; b++) {
+          ctx.beginPath();
+          ctx.arc(Math.cos(b * 1.4) * 16 * progress + 8, Math.sin(b * 1.4) * 16 * progress - 4, 6 + b * 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.strokeStyle = `rgba(90, 100, 110, ${1 - progress})`;
+        ctx.lineWidth = 2.5;
+        for (let l = -2; l <= 2; l++) {
+          ctx.beginPath();
+          ctx.moveTo(-18, l * 7);
+          ctx.lineTo(24 + Math.abs(l) * 4, l * 11);
+          ctx.stroke();
+        }
+        ctx.beginPath();
+        ctx.arc(0, 0, 32, -1.3, 0.7);
+        ctx.lineWidth = 11;
+        ctx.strokeStyle = `rgba(45, 52, 54, ${1 - progress})`;
+        ctx.lineCap = "round";
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(0, 0, 32, -1.1, 0.5);
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = `rgba(255, 255, 255, ${1 - progress})`;
+        ctx.stroke();
+        ctx.restore();
+        ef.life--;
+      }
+    } else if (ef.type === "map_slash") {
+      ctx.beginPath();
+      ctx.moveTo(ef.p1.x, ef.p1.y);
+      ctx.lineTo(ef.p2.x, ef.p2.y);
+      ctx.strokeStyle = `rgba(255, 255, 255, ${ef.life / 20})`;
+      ctx.lineWidth = 6;
+      ctx.stroke();
+      ef.life--;
+    } else if (ef.type === "slash") {
+      ctx.beginPath();
+      ctx.arc(ef.x, ef.y, 25, ef.angle - 0.8, ef.angle + 0.8);
+      ctx.strokeStyle = `rgba(0, 210, 211, ${ef.life / 10})`;
+      ctx.lineWidth = 4;
+      ctx.stroke();
+      ef.life--;
+    } else if (ef.type === "heart_refuse") {
+      ctx.save();
+      let progress = 1 - ef.life / ef.maxLife;
+      ctx.translate(ef.x, ef.y);
+      ctx.scale(1.3, 1.3);
+      if (progress < 0.6) {
+        let offset = (1 - progress / 0.6) * 24;
+        ctx.save();
+        ctx.translate(-offset, 0);
+        ctx.fillStyle = "#e74c3c";
+        ctx.beginPath();
+        ctx.moveTo(0, 12);
+        ctx.bezierCurveTo(-12, 2, -14, -10, -7, -10);
+        ctx.bezierCurveTo(-2, -10, 0, -5, 0, -3);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+        ctx.save();
+        ctx.translate(offset, 0);
+        ctx.fillStyle = "#e74c3c";
+        ctx.beginPath();
+        ctx.moveTo(0, 12);
+        ctx.bezierCurveTo(12, 2, 14, -10, 7, -10);
+        ctx.bezierCurveTo(2, -10, 0, -5, 0, -3);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      } else {
+        let pulse = Math.sin((progress - 0.6) * 12) * 0.25 + 1;
+        ctx.scale(pulse, pulse);
+        ctx.fillStyle = Math.floor(ef.life / 3) % 2 === 0 ? "#ffffff" : "#e74c3c";
+        ctx.beginPath();
+        ctx.moveTo(0, 12);
+        ctx.bezierCurveTo(-14, 2, -16, -10, -8, -10);
+        ctx.bezierCurveTo(-3, -10, 0, -5, 0, -3);
+        ctx.bezierCurveTo(0, -5, 3, -10, 8, -10);
+        ctx.bezierCurveTo(16, -10, 14, 2, 0, 12);
+        ctx.fill();
+      }
+      ctx.restore();
+      ef.life--;
+    } else {
+      /* PERBAIKAN: Rendering Teks Melayang dengan Outline Hitam */
+      ctx.save();
+      ctx.font = "bold 16px Arial";
+      ctx.textAlign = "center";
+      let drawY = ef.y - (30 - ef.life);
+
+      // Garis tepi hitam tebal agar selalu terbaca tajam
+    //   ctx.strokeStyle = "#000000";
+    //   ctx.lineWidth = 3.5;
+    //   ctx.strokeText(ef.text, ef.x, drawY);
+
+      // Isi warna teks utama
+      ctx.fillStyle = ef.color;
+      ctx.fillText(ef.text, ef.x, drawY);
+      ctx.restore();
+
+      ef.life--;
+    }
+    if (ef.life <= 0) effects.splice(i, 1);
+  }
+
+  updateUI();
+  if (gameState === "playing") {
+    let team1Alive = balls.some((b) => b.team === 1);
+    let team2Alive = balls.some((b) => b.team === 2);
+    if (!team1Alive || !team2Alive) {
+      gameState = "over";
+      let winner = team1Alive ? p1Choice : p2Choice;
+      showWinnerOverlay(winner);
+    }
+  }
+  requestAnimationFrame(gameLoop);
+}
+
+function showWinnerOverlay(winnerName) {
+  document.getElementById("winner-subtitle").innerText = winnerName.toUpperCase() + " WINS!";
+  document.getElementById("winner-overlay").style.display = "flex";
+}
+
+function resetToMenu() {
+  document.getElementById("winner-overlay").style.display = "none";
+  document.getElementById("game-container").style.display = "none";
+  document.getElementById("selection-screen").style.display = "flex";
+  projectiles = [];
+  infinitySkills = [];
+  soundTraps = [];
+  scatteredSwords = [];
+  gameState = "menu";
+}
+
+function drawThumbnail(canvasEl, charName) {
+  let tCtx = canvasEl.getContext("2d");
+  let w = canvasEl.width, h = canvasEl.height;
+  let stats = characterDB[charName];
+  tCtx.clearRect(0, 0, w, h);
+
+  tCtx.beginPath();
+  tCtx.arc(w / 2, h / 2, w * 0.35, 0, Math.PI * 2);
+  tCtx.fillStyle = charName === "Death Note" || charName === "Antimagic" ? "#111" : "#fff";
+  tCtx.fill();
+  tCtx.lineWidth = 3;
+  tCtx.strokeStyle = stats.color;
+  tCtx.stroke();
+
+  if (stats.weapons > 0) {
+    tCtx.strokeStyle = stats.color;
+    tCtx.lineWidth = 2.5;
+    tCtx.beginPath();
+    tCtx.moveTo(w / 2, h / 2);
+    tCtx.lineTo(w / 2 + Math.cos(0.4) * (w * 0.42), h / 2 + Math.sin(0.4) * (h * 0.42));
+    tCtx.stroke();
+  }
+}
+
+function renderRosters() {
+  const p1Roster = document.getElementById("p1-roster");
+  const p2Roster = document.getElementById("p2-roster");
+  p1Roster.innerHTML = "";
+  p2Roster.innerHTML = "";
+
+  Object.keys(characterDB).forEach((charName) => {
+    let card1 = document.createElement("div");
+    card1.className = `char-card ${p1Choice === charName ? "selected-p1" : ""}`;
+    card1.innerHTML = `<canvas class="card-canvas" width="38" height="38"></canvas><div class="card-name">${charName}</div>`;
+    card1.onclick = () => selectCharacter(1, charName);
+    p1Roster.appendChild(card1);
+    drawThumbnail(card1.querySelector("canvas"), charName);
+
+    let card2 = document.createElement("div");
+    card2.className = `char-card ${p2Choice === charName ? "selected-p2" : ""}`;
+    card2.innerHTML = `<canvas class="card-canvas" width="38" height="38"></canvas><div class="card-name">${charName}</div>`;
+    card2.onclick = () => selectCharacter(2, charName);
+    p2Roster.appendChild(card2);
+    drawThumbnail(card2.querySelector("canvas"), charName);
+  });
+
+  updatePreviewCard(1, p1Choice);
+  updatePreviewCard(2, p2Choice);
+}
+
+function selectCharacter(playerNum, charName) {
+  if (playerNum === 1) p1Choice = charName;
+  else p2Choice = charName;
+  renderRosters();
+}
+
+function updatePreviewCard(playerNum, charName) {
+  const canvasEl = document.getElementById(`p${playerNum}-preview-canvas`);
+  const nameEl = document.getElementById(`p${playerNum}-preview-name`);
+  const descEl = document.getElementById(`p${playerNum}-preview-desc`);
+
+  nameEl.innerText = charName.toUpperCase();
+  nameEl.style.color = characterDB[charName].color;
+  descEl.innerText = characterDB[charName].desc;
+  drawThumbnail(canvasEl, charName);
+}
+
+function confirmStartGame() {
+  document.getElementById("selection-screen").style.display = "none";
+  document.getElementById("map-screen").style.display = "none";
+  document.getElementById("game-container").style.display = "flex";
+  
+  applyMapUITheme();
+  setupGame();
+}
+
+function setupGame() {
+  ["1", "2"].forEach((id) => {
+    let choice = id === "1" ? p1Choice : p2Choice;
+    let nameEl = document.getElementById("name" + id);
+    
+    nameEl.innerText = choice;
+    nameEl.style.color = characterDB[choice].color;
+    // Outline tebal pada nama karakter agar selalu kontras terang/gelap
+    // nameEl.style.textShadow = "-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000";
+
+    document.getElementById("barFill" + id).style.backgroundColor = characterDB[choice].ultColor;
+    document.getElementById("ultName" + id).innerText = characterDB[choice].ultName;
+  });
+
+  balls = [];
+  projectiles = [];
+  infinitySkills = [];
+  soundTraps = [];
+  scatteredSwords = [];
+  balls.push(new Ball(1, p1Choice, canvas.width * 0.25, canvas.height / 2));
+  balls.push(new Ball(2, p2Choice, canvas.width * 0.75, canvas.height / 2));
+
+  gameState = "countdown";
+  gameLoop();
+
+  setTimeout(() => {
+    gameState = "playing";
+    balls.forEach((b) => {
+      let ang = Math.random() * Math.PI * 2;
+      b.vx = Math.cos(ang) * b.baseSpeed;
+      b.vy = Math.sin(ang) * b.baseSpeed;
+    });
+  }, 3000);
+}
+
+window.onload = () => {
+  renderRosters();
+};
