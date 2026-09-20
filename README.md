@@ -1,4 +1,4 @@
-Auto-Battler Arena — Bloodchain Update
+# Auto-Battler Arena — Bloodchain Update
 
 A browser-based **2-player auto-battler arena game** built with **HTML, CSS, and Vanilla JavaScript** using the HTML5 Canvas API.
 
