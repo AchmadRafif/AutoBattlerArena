@@ -19,6 +19,20 @@ const characterDB = {
     desc: "Spell Erase, Ult Drain & Black Form",
     ultMax: 2200,
   },
+  Bloodchain: {
+    color: "#f1c40f",
+    hp: 100,
+    damage: 2.0,
+    speed: 2.7,
+    weapons: 2,
+    wLen: 62,
+    wWidth: 10,
+    rotSpeed: 0.025,
+    ultName: "BANKAI: BLOOD CHAIN",
+    ultColor: "#b11226",
+    desc: "Permanent Bankai",
+    ultMax: 7000,
+  },
   Copycat: {
     color: "#ffffff",
     hp: 100,
@@ -369,6 +383,7 @@ let infinitySkills = [];
 let soundTraps = [];
 let scatteredSwords = [];
 let killerQueenSkills = [];
+let bloodchainSkills = [];
 
 class ScatteredSword {
   constructor(x, y) {
@@ -805,6 +820,7 @@ class SheerHeartAttack {
     this.exploded = true;
 
     this.owner.kqSheerHeartAttackActive = false;
+    if (this.owner.name === "Copycat") this.owner.copycatSHAActive = false;
     this.owner.kqSheerHeartAttackCD = 1200; // 20 seconds
 
     effects.push({
@@ -934,6 +950,249 @@ class BitesTheDustBomb {
   }
 }
 
+class BloodchainGetsuga {
+  constructor(owner, target, wave) {
+    this.owner = owner; this.wave = wave; this.life = 240; this.maxLife = 240;
+    this.angle = target ? Math.atan2(target.y - owner.y, target.x - owner.x) : owner.angle;
+    this.speed = 5.5;
+    this.x = owner.x + Math.cos(this.angle) * (owner.radius + 12);
+    this.y = owner.y + Math.sin(this.angle) * (owner.radius + 12);
+    this.radius = wave === 1 ? 34 : 24;
+    this.hitTargets = new Set();
+    this.damage = owner.damage * 1;
+  }
+  update() {
+    this.x += Math.cos(this.angle) * this.speed;
+    this.y += Math.sin(this.angle) * this.speed;
+    this.life--;
+    balls.forEach((b) => {
+      if (b === this.owner || b.team === this.owner.team || b.hp <= 0 || this.hitTargets.has(b)) return;
+      if (Math.hypot(b.x - this.x, b.y - this.y) < b.radius + this.radius) {
+        this.hitTargets.add(b);
+        let dmg = b.takeDamage(this.damage, this.owner, true);
+        this.owner.bloodchainGJHits++;
+        if (!this.owner.bloodchainBankai) {
+          this.owner.ultCharge = Math.min(this.owner.ultMax, this.owner.ultCharge + 100);
+        }
+        // Every successful Getsuga hit permanently adds +2 base damage.
+        // Bankai multiplies only the original/base starting damage by 3;
+        // all accumulated +2 damage remains added at 1x.
+        this.owner.bloodchainBonusDamage += 1;
+        this.owner.refreshBloodchainDamage();
+        spawnText("GJ +2 DMG (-" + dmg.toFixed(1) + ")", b.x, b.y - 18, "#f1c40f");
+      }
+    });
+  }
+  draw() {
+    let p = this.life / this.maxLife, big = this.wave === 1;
+    ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.angle);
+    ctx.shadowColor = "#f1c40f"; ctx.shadowBlur = 16;
+    ctx.fillStyle = `rgba(18, 18, 18, ${Math.min(1, p + 0.2)})`;
+    ctx.beginPath();
+    ctx.moveTo(30, 0);
+    ctx.quadraticCurveTo(big ? 6 : 10, big ? -34 : -22, big ? -42 : -28, 0);
+    ctx.quadraticCurveTo(big ? 6 : 10, big ? 34 : 22, 30, 0);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = "#f1c40f"; ctx.lineWidth = big ? 4 : 2.5; ctx.stroke();
+    ctx.restore();
+  }
+}
+
+class BloodchainGetsugaTensho {
+  constructor(owner, target) {
+    this.owner = owner;
+
+    // The animation is anchored to the CENTER OF THE MAP, not Bloodchain.
+    // Wherever Bloodchain is standing, the Bankai Getsuga is presented at
+    // the same full-map scale, as if Bloodchain were standing in the center.
+    this.x = canvas.width / 2;
+    this.y = canvas.height / 2;
+
+    this.slashLife = 34;
+    this.residueLife = 300;
+    this.life = this.slashLife + this.residueLife;
+    this.maxLife = this.life;
+
+    // Keep the slash orientation deterministic from Bloodchain's current aim,
+    // but do NOT move the visual with Bloodchain or the target.
+    this.angle = owner.angle;
+    this.forwardDistance = 0;
+    this.forwardProgress = 0;
+
+    // Giant, clean moon/crescent. No craters, rocks, or decorative moon texture.
+    // It is large enough to read clearly across the whole arena while remaining
+    // fully visible inside the map.
+    this.radius = Math.min(canvas.width, canvas.height) * 0.47;
+    this.moonRadius = this.radius;
+
+    // GT is 200% of the CURRENT Bankai damage at cast time.
+    // Current Bankai damage is always Base Damage x3.
+    // GT uses the current Bankai damage as its hit damage.
+    // Example: current Base 12 -> Bankai 36 -> GT hits for 36 -> current damage 38.
+    this.damage = owner.damage * 2;
+    this.hitTargets = new Set();
+    this.dotTimers = new Map();
+    this.hitResolved = false;
+  }
+
+  update() {
+    const wasSlash = this.life > this.residueLife;
+    this.life--;
+
+    // SURE HIT: during the active slash, every living enemy is hit exactly once.
+    // No distance, arc, projectile travel, or target-position check is used.
+    // This makes GT unavoidable regardless of where Bloodchain or the enemy is.
+    if (wasSlash && !this.hitResolved) {
+      this.hitResolved = true;
+
+      balls.forEach((b) => {
+        if (b === this.owner || b.team === this.owner.team || b.hp <= 0) return;
+        if (this.hitTargets.has(b)) return;
+
+        this.hitTargets.add(b);
+        const dmg = b.takeDamage(this.damage, this.owner, true);
+
+        // Every successful Getsuga adds +2. Before Bankai this increases the
+        // current Base Damage; after Bankai it is a flat +2 to current damage.
+        if (this.owner.bloodchainBankai) {
+          this.owner.bloodchainBankaiBonusDamage += 2;
+        } else {
+          this.owner.bloodchainBonusDamage += 2;
+        }
+        this.owner.refreshBloodchainDamage();
+
+        spawnText(
+          "GT SURE HIT +2 BASE (" + this.owner.bloodchainBaseDamage.toFixed(1) +
+          ") -" + dmg.toFixed(1),
+          b.x, b.y - 18, "#b11226"
+        );
+      });
+    }
+
+    // The remaining moon aura deals 1 damage per second to enemies that are
+    // still alive. Since the aura itself is map-centered, it is also independent
+    // of Bloodchain's position.
+    if (!wasSlash) {
+      balls.forEach((b) => {
+        if (b === this.owner || b.team === this.owner.team || b.hp <= 0) return;
+
+        let timer = this.dotTimers.get(b) || 60;
+        timer--;
+        if (timer <= 0) {
+          const dot = b.takeDamage(1, this.owner, true);
+          spawnText("MOON -" + dot.toFixed(1), b.x, b.y - 18, "#8b0000");
+          timer = 60;
+        }
+        this.dotTimers.set(b, timer);
+      });
+    }
+
+    for (const [b] of this.dotTimers) {
+      if (!b || b.hp <= 0) this.dotTimers.delete(b);
+    }
+  }
+
+  draw() {
+    const slashActive = this.life > this.residueLife;
+    const fade = slashActive
+      ? 1
+      : Math.max(0.08, Math.min(1, this.life / this.residueLife));
+
+    // Huge Blood War-style crescent: clean black/white energy only.
+    // No rocks, craters, moon texture, or sharp spikes at the ends.
+    const start = Math.PI * 0.72;
+    const end = Math.PI * 2.28;
+    const r = this.radius;
+
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+
+    // Deep atmospheric halo.
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.shadowColor = `rgba(0,0,0,${0.95 * fade})`;
+    ctx.shadowBlur = r * 0.14;
+    ctx.strokeStyle = `rgba(0,0,0,${0.20 * fade})`;
+    ctx.lineWidth = r * 0.30;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.98, start, end);
+    ctx.stroke();
+
+    // White/gray ghost aura behind the main slash.
+    ctx.shadowColor = `rgba(255,255,255,${0.65 * fade})`;
+    ctx.shadowBlur = r * 0.085;
+    ctx.strokeStyle = `rgba(235,235,240,${0.28 * fade})`;
+    ctx.lineWidth = r * 0.18;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.995, start, end);
+    ctx.stroke();
+
+    // Multiple smoky black aura bands for the ominous look.
+    for (let i = 0; i < 4; i++) {
+      const wobble = Math.sin(Date.now() * 0.004 + i * 1.7) * r * 0.018;
+      ctx.shadowColor = `rgba(0,0,0,${0.8 * fade})`;
+      ctx.shadowBlur = r * (0.035 + i * 0.008);
+      ctx.strokeStyle = `rgba(8,8,12,${(0.30 - i * 0.045) * fade})`;
+      ctx.lineWidth = r * (0.075 - i * 0.010);
+      ctx.beginPath();
+      ctx.arc(0, 0, r * (0.985 + i * 0.018) + wobble, start, end);
+      ctx.stroke();
+    }
+
+    // Main black crescent body.
+    ctx.shadowColor = `rgba(0,0,0,${0.98 * fade})`;
+    ctx.shadowBlur = r * 0.055;
+    ctx.strokeStyle = `rgba(5,5,8,${0.98 * fade})`;
+    ctx.lineWidth = r * 0.115;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, start, end);
+    ctx.stroke();
+
+    // Pale white edge, slightly irregular through a few close layers.
+    ctx.shadowColor = `rgba(255,255,255,${0.85 * fade})`;
+    ctx.shadowBlur = r * 0.035;
+    ctx.strokeStyle = `rgba(225,225,230,${0.88 * fade})`;
+    ctx.lineWidth = r * 0.030;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.002, start, end);
+    ctx.stroke();
+
+    ctx.shadowColor = `rgba(255,255,255,${0.50 * fade})`;
+    ctx.shadowBlur = r * 0.055;
+    ctx.strokeStyle = `rgba(180,180,188,${0.42 * fade})`;
+    ctx.lineWidth = r * 0.014;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.965, start, end);
+    ctx.stroke();
+
+    // Thin black inner cut gives the crescent depth without adding spikes.
+    ctx.shadowColor = `rgba(0,0,0,${0.9 * fade})`;
+    ctx.shadowBlur = r * 0.025;
+    ctx.strokeStyle = `rgba(0,0,0,${0.72 * fade})`;
+    ctx.lineWidth = r * 0.022;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.925, start, end);
+    ctx.stroke();
+
+    // Soft drifting wisps around the crescent. These stay rounded and never form tips.
+    for (let i = 0; i < 7; i++) {
+      const a1 = start + (end - start) * (0.08 + i * 0.13);
+      const a2 = a1 + 0.16 + Math.sin(Date.now() * 0.002 + i) * 0.035;
+      const rr = r * (1.07 + (i % 3) * 0.035);
+      ctx.shadowColor = `rgba(0,0,0,${0.65 * fade})`;
+      ctx.shadowBlur = r * 0.045;
+      ctx.strokeStyle = `rgba(15,15,20,${0.25 * fade})`;
+      ctx.lineWidth = r * 0.018;
+      ctx.beginPath();
+      ctx.arc(0, 0, rr, a1, a2);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+}
+
 class Ball {
   constructor(team, name, x, y, isClone = false) {
     let stats = characterDB[name] || characterDB["Copycat"];
@@ -997,6 +1256,7 @@ class Ball {
     this.spellCircleAngle = 0;
 
     this.copycatPassiveTimer = 0;
+    this.copycatSHAActive = false;
 
     this.bfTarget = Math.random() * 100;
     this.bfSpeed = 0.4;
@@ -1018,9 +1278,25 @@ class Ball {
     this.kqBitesTarget = null;
     this.kqBitesArmed = false;
     this.kqBitesBombActive = false;
+
+    // Bloodchain
+    this.bloodchainBaseDamage = this.name === "Bloodchain" ? stats.damage : 0;
+    this.bloodchainInitialDamage = this.name === "Bloodchain" ? stats.damage : 0;
+    this.bloodchainBonusDamage = 0;
+    this.bloodchainBankaiBaseDamage = 0;
+    this.bloodchainBankaiBonusDamage = 0;
+    this.bloodchainGJHits = 0;
+    this.bloodchainTransformTimer = 0;
+    this.bloodchainBankai = false;
+    this.bloodchainImmune = false;
+    this.bloodchainGJCD = 0;
   }
 
   takeDamage(amount, attacker = null, isProjectile = false) {
+    if (this.name === "Bloodchain" && this.bloodchainImmune) {
+      spawnText("IMMUNE!", this.x, this.y - 20, "#b11226");
+      return 0;
+    }
     if (this.name === "Illustrade" && this.isUltActive) {
       spawnText("IMMUNE!", this.x, this.y - 12, "#222222");
       return 0;
@@ -1037,6 +1313,9 @@ class Ball {
 
     // Retaliator is a counter-focused tank: takes 50% less damage.
     let actualDamage = amount;
+    if (this.name === "Bloodchain" && attacker && attacker.team !== this.team && !this.bloodchainBankai) {
+      this.ultCharge = Math.min(this.ultMax, this.ultCharge + 100);
+    }
     if (this.name === "Retaliator") {
       actualDamage *= 0.5;
     }
@@ -1116,6 +1395,24 @@ class Ball {
     let segs = [];
     if (this.weapons === 0) return segs;
 
+    if (this.name === "Bloodchain" && this.bloodchainBankai) {
+      let ang = this.angle;
+      let startX = this.x + Math.cos(ang) * this.radius;
+      let startY = this.y + Math.sin(ang) * this.radius;
+      let endX = this.x + Math.cos(ang) * (this.radius + this.wLen);
+      let endY = this.y + Math.sin(ang) * (this.radius + this.wLen);
+      return [{ p1: { x: startX, y: startY }, p2: { x: endX, y: endY } }];
+    }
+    if (this.name === "Bloodchain") {
+      let lengths = [28, this.baseWLen + 6];
+      for (let i = 0; i < 2; i++) {
+        let ang = this.angle + Math.PI * i;
+        let len = lengths[i];
+        segs.push({ p1: { x: this.x + Math.cos(ang) * this.radius, y: this.y + Math.sin(ang) * this.radius }, p2: { x: this.x + Math.cos(ang) * (this.radius + len), y: this.y + Math.sin(ang) * (this.radius + len) }, bloodchainIndex: i });
+      }
+      return segs;
+    }
+
     if (this.name === "Monkey King") {
       let scale = this.staffData ? this.staffData.scale : 1.0;
       let currentHalfLen = (this.radius + this.wLen) * scale;
@@ -1141,6 +1438,35 @@ class Ball {
 
   draw() {
     if (!this.visible) return;
+
+    // Bloodchain aura: yellow before Bankai, white/blue-white in Bankai.
+    if (this.name === "Bloodchain") {
+      ctx.save();
+      const pulse = Math.sin(Date.now() * 0.012) * 4;
+      const auraColor = this.bloodchainBankai ? "#b11226" : "#f1c40f";
+      const auraFill = this.bloodchainBankai ? "rgba(177,18,38,0.24)" : "rgba(241,196,15,0.20)";
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius + 9 + pulse, 0, Math.PI * 2);
+      ctx.fillStyle = auraFill;
+      ctx.shadowColor = auraColor;
+      ctx.shadowBlur = this.bloodchainBankai ? 24 : 16;
+      ctx.fill();
+      ctx.strokeStyle = auraColor;
+      ctx.lineWidth = this.bloodchainBankai ? 3.5 : 3;
+      ctx.stroke();
+      // Small rotating aura sparks for the Infinity-like energy feel.
+      for (let i = 0; i < 8; i++) {
+        const a = Date.now() * 0.0012 + i * Math.PI / 4;
+        const r = this.radius + 14 + Math.sin(Date.now() * 0.004 + i) * 3;
+        const sx = this.x + Math.cos(a) * r;
+        const sy = this.y + Math.sin(a) * r;
+        ctx.beginPath();
+        ctx.arc(sx, sy, this.bloodchainBankai ? 2.5 : 2, 0, Math.PI * 2);
+        ctx.fillStyle = auraColor;
+        ctx.fill();
+      }
+      ctx.restore();
+    }
 
     if (this.name === "Killer Queen") {
       ctx.save();
@@ -1448,6 +1774,10 @@ class Ball {
         ctx.lineTo(seg.p2.x, seg.p2.y);
         ctx.lineWidth = this.wWidth;
         ctx.strokeStyle = this.isUltActive ? "#f1c40f" : "#444";
+        if (this.name === "Bloodchain") {
+          ctx.strokeStyle = this.bloodchainBankai ? "#d9d9d9" : "#111111";
+          ctx.lineWidth = this.bloodchainBankai ? 14 : (seg.bloodchainIndex === 0 ? 5 : 13);
+        }
         if (this.name === "Antimagic") ctx.strokeStyle = this.isUltActive ? "#e74c3c" : "#1e1e1e";
         if (this.name === "Copycat") ctx.strokeStyle = "#b2bec3";
         if (this.name === "Illustrade") ctx.strokeStyle = "#362F4F";
@@ -1466,15 +1796,18 @@ class Ball {
     }
 
     if (this.iFrames > 0 && Math.floor(this.iFrames / 3) % 2 === 0) ctx.fillStyle = "#ffaaaa";
+    else if (this.name === "Bloodchain" && this.bloodchainBankai) ctx.fillStyle = "#111111";
     else ctx.fillStyle = this.name === "Death Note" || this.name === "Antimagic" ? "#111111" : "#ffffff";
 
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.lineWidth = 4;
-    ctx.strokeStyle = this.color;
+    ctx.strokeStyle = this.name === "Bloodchain"
+      ? (this.bloodchainBankai ? "#b11226" : "#ffffff")
+      : this.color;
     ctx.stroke();
-    ctx.fillStyle = this.name === "Death Note" || this.name === "Antimagic" ? "#ffffff" : "#000000";
+    ctx.fillStyle = (this.name === "Death Note" || this.name === "Antimagic") ? "#ffffff" : "#000000";
     ctx.font = `bold ${this.isClone ? 12 : 20}px Arial`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -1624,7 +1957,7 @@ class Ball {
         this.copycatPassiveTimer = 0;
         let enemy = balls.find((b) => b.team !== this.team && b.hp > 0);
         if (enemy) {
-          let skillType = Math.floor(Math.random() * 6);
+          let skillType = Math.floor(Math.random() * 8);
           if (skillType === 0) {
             enemy.stunTimer = 40;
             spawnText("COPY: CURSED SPEECH!", enemy.x, enemy.y - 25, "#FF76CE");
@@ -1646,6 +1979,21 @@ class Ball {
             let finalDmg = enemy.takeDamage(this.damage * 1.5, this);
             spawnText("COPY: BLACK FLASH! -" + finalDmg.toFixed(1), enemy.x, enemy.y - 25, "#FF76CE");
             effects.push({ type: "black_flash", x: enemy.x, y: enemy.y, life: 15, maxLife: 15 });
+          } else if (skillType === 6) {
+            // Copycat can now randomly copy Killer Queen's Sheer Heart Attack.
+            // It uses Copycat as the owner, so the copied skill follows Copycat's team.
+            if (!this.copycatSHAActive) {
+              killerQueenSkills.push(new SheerHeartAttack(this, enemy));
+              this.copycatSHAActive = true;
+              spawnText("COPY: SHEER HEART ATTACK!", this.x, this.y - 25, "#FF76CE");
+            }
+          } else if (skillType === 7) {
+            // Copycat's random passive can also copy Killer Queen's contact bomb.
+            if (!enemy.kqBombStacks) enemy.kqBombStacks = [];
+            if (enemy.kqBombStacks.length < 3) {
+              enemy.kqBombStacks.push(new KillerQueenBomb(this, enemy));
+              spawnText("COPY: KILLER QUEEN BOMB!", enemy.x, enemy.y - 25, "#FF76CE");
+            }
           }
         }
       }
@@ -1658,7 +2006,7 @@ class Ball {
             scatteredSwords.splice(i, 1);
             let enemy = balls.find((b) => b.team !== this.team && b.hp > 0);
             if (enemy) {
-              let ultType = Math.floor(Math.random() * 8);
+              let ultType = Math.floor(Math.random() * 10);
 
               if (ultType === 0) {
                 enemy.stunTimer = 180;
@@ -1714,6 +2062,17 @@ class Ball {
                   projectiles.push(new LetterProjectile(this.x + (Math.random() * 40 - 20), this.y + (Math.random() * 40 - 20), char, enemy, this));
                 }
                 spawnText("[ILLUSTRADE] TYPOGRAPHY SPELL!", this.x, this.y - 30, "#FF76CE");
+              } else if (ultType === 8) {
+                // Copy Juggernaut's Titan Mode: permanently enlarges the Copycat's
+                // body and weapon just like Juggernaut's own ultimate.
+                this.radius *= 1.4;
+                this.wLen *= 1.4;
+                spawnText("[JUGGERNAUT] TITAN MODE!", this.x, this.y - 30, "#FF76CE");
+              } else if (ultType === 9) {
+                // Copy Killer Queen's Bites the Dust. It is a delayed bomb attached
+                // to the selected enemy, using the existing BTD implementation.
+                killerQueenSkills.push(new BitesTheDustBomb(this, enemy));
+                spawnText("[KILLER QUEEN] BITES THE DUST!", enemy.x, enemy.y - 30, "#FF76CE");
               }
 
               if (isNaN(this.vx) || isNaN(this.vy) || Math.hypot(this.vx, this.vy) < 0.5) {
@@ -1930,6 +2289,22 @@ class Ball {
       }
     }
 
+    if (this.name === "Bloodchain") {
+      let enemy = balls.find((b) => b.team !== this.team && b.hp > 0 && !b.isClone) || balls.find((b) => b.team !== this.team && b.hp > 0);
+      if (enemy && this.bloodchainGJCD <= 0 && gameState === "playing") {
+        this.angle = Math.atan2(enemy.y - this.y, enemy.x - this.x);
+        if (!this.bloodchainBankai) {
+          projectiles.push(new BloodchainGetsuga(this, enemy, 1));
+          setTimeout(() => { if (this.hp > 0 && enemy.hp > 0) projectiles.push(new BloodchainGetsuga(this, enemy, 2)); }, 120);
+          spawnText("GETSUGA JŪJISHŌ!", this.x, this.y - 30, "#f1c40f");
+        } else {
+          bloodchainSkills.push(new BloodchainGetsugaTensho(this, enemy));
+          spawnText("GETSUGA TENSHŌ!", this.x, this.y - 30, "#111111");
+        }
+        this.bloodchainGJCD = 1200;
+      }
+    }
+
     if (this.name === "Brawler" && this.isUltActive) {
       let enemy = balls.find((b) => b.team !== this.team && b.hp > 0 && !b.isClone) || balls.find((b) => b.team !== this.team && b.hp > 0);
       if (enemy) {
@@ -1965,6 +2340,27 @@ class Ball {
           this.shootCooldown = Math.max(4, 60 / effectiveAtkSpeed);
         }
       }
+    }
+
+    if (this.name === "Bloodchain" && this.bloodchainGJCD > 0) this.bloodchainGJCD--;
+    // Keep displayed/actual damage synchronized with Base Damage and Bankai state.
+    if (this.name === "Bloodchain") this.refreshBloodchainDamage();
+    if (this.name === "Bloodchain" && this.bloodchainTransformTimer > 0) {
+      this.bloodchainTransformTimer--; this.vx = 0; this.vy = 0; this.angle += 0.12;
+      if (this.bloodchainTransformTimer <= 0) {
+        // Lock the CURRENT Base Damage at the moment Bankai completes.
+        // Bankai damage starts at Base x3, then every successful GT adds +2 flat.
+        this.bloodchainBankaiBaseDamage = this.bloodchainBaseDamage * 3;
+        this.bloodchainBankaiBonusDamage = 0;
+        this.bloodchainBankai = true; this.bloodchainImmune = false; this.isUltActive = false;
+        this.refreshBloodchainDamage();
+        this.baseSpeed = characterDB["Bloodchain"].speed * 1.5;
+        this.wLen = characterDB["Bloodchain"].wLen * 1.5;
+        this.weapons = 1; this.ultCharge = 0; this.bonusText = "BANKAI: BLOOD CHAIN";
+        spawnText("BANKAI: BLOOD CHAIN!", this.x, this.y - 35, "#b11226");
+        let ang = Math.random() * Math.PI * 2; this.vx = Math.cos(ang) * this.baseSpeed; this.vy = Math.sin(ang) * this.baseSpeed;
+      }
+      return;
     }
 
     this.angle += this.rotSpeed;
@@ -2018,12 +2414,30 @@ class Ball {
     }
     if (this.knockbackTimer > 0) this.knockbackTimer--;
 
-    if (gameState === "playing" && !this.isClone && !this.isUltActive && this.name !== "Death Note" && this.name !== "Divergent") {
+    // Bloodchain transforms automatically as soon as Bankai charge reaches 5000.
+    if (gameState === "playing" && !this.isClone && this.name === "Bloodchain" &&
+        !this.bloodchainBankai && this.bloodchainTransformTimer <= 0 && this.ultCharge >= this.ultMax) {
+      this.activateUlt();
+    }
+
+    if (gameState === "playing" && !this.isClone && !this.isUltActive && this.name !== "Death Note" && this.name !== "Divergent" && (this.name !== "Bloodchain" || !this.bloodchainBankai)) {
       this.ultCharge = Math.min(this.ultMax, this.ultCharge + 1);
       if (this.ultCharge >= this.ultMax) this.activateUlt();
     }
 
     if (this.isUltActive && this.name === "Valkyrie") this.hp = Math.min(this.maxHp, this.hp + 0.4);
+  }
+
+  refreshBloodchainDamage() {
+    if (this.name !== "Bloodchain") return;
+    this.bloodchainBaseDamage = this.bloodchainInitialDamage + this.bloodchainBonusDamage;
+    // Before Bankai: Base Damage = initial Base + every pre-Bankai +2.
+    // At Bankai: lock the CURRENT Base Damage x3.
+    // After that: every successful GT adds a flat +2 to the current damage.
+    // Example: Base 12 -> Bankai 36 -> GT hit -> 38 -> next GT -> 40.
+    this.damage = this.bloodchainBankai
+      ? (this.bloodchainBankaiBaseDamage + this.bloodchainBankaiBonusDamage)
+      : this.bloodchainBaseDamage;
   }
 
   activateUlt() {
@@ -2032,6 +2446,14 @@ class Ball {
       // the meter stays FULL until the trap actually triggers.
       this.isUltActive = false;
       this.kqBitesArmed = true;
+      return;
+    }
+
+    if (this.name === "Bloodchain") {
+      if (this.bloodchainBankai || this.bloodchainTransformTimer > 0) return;
+      this.ultCharge = 0; this.isUltActive = true; this.bloodchainImmune = true;
+      this.bloodchainTransformTimer = 150; this.bonusText = "BANKAI CHARGING..."; this.vx = 0; this.vy = 0;
+      spawnText("BANKAI CHARGE!", this.x, this.y - 30, "#b11226");
       return;
     }
 
@@ -2600,6 +3022,11 @@ function getCharSpecificStats(p) {
       lines.push(`Damage Reduction: ${(Math.min(50, p.momentum * 0.5)).toFixed(0)}%`);
       lines.push(`Form: ${p.isUltActive ? "TITAN FORM" : "Normal"}`);
       break;
+    case "Bloodchain":
+      lines.push(`Base Dmg: ${p.damage.toFixed(1)}${p.bloodchainBankai ? "" : ""}`);
+      lines.push(`Getsuga: ${p.bloodchainGJCD > 0 ? (p.bloodchainGJCD / 60).toFixed(1) + "s" : "READY"}`);
+      lines.push(`Form: ${p.bloodchainBankai ? "BANKAI" : p.bloodchainTransformTimer > 0 ? "TRANSFORMING" : "TRUE SHIKAI"}`);
+      break;
     case "Valkyrie":
       lines.push(`Sword Dmg: ${p.damage.toFixed(1)}`);
       if (p.isUltActive) lines.push(`Valhalla Regen: ACTIVE`);
@@ -2704,6 +3131,13 @@ function gameLoop() {
     if (gameState === "playing") killerQueenSkills[i].update();
     killerQueenSkills[i].draw();
     if (killerQueenSkills[i].life <= 0) killerQueenSkills.splice(i, 1);
+  }
+
+  for (let i = bloodchainSkills.length - 1; i >= 0; i--) {
+    let s = bloodchainSkills[i];
+    if (gameState === "playing") s.update();
+    s.draw();
+    if (s.life <= 0) bloodchainSkills.splice(i, 1);
   }
 
   for (let i = projectiles.length - 1; i >= 0; i--) {
@@ -2953,6 +3387,7 @@ function resetToMenu() {
   document.getElementById("game-container").style.display = "none";
   document.getElementById("selection-screen").style.display = "flex";
   projectiles = [];
+  bloodchainSkills = [];
   infinitySkills = [];
   soundTraps = [];
   scatteredSwords = [];
@@ -3051,6 +3486,7 @@ function setupGame() {
 
   balls = [];
   projectiles = [];
+  bloodchainSkills = [];
   infinitySkills = [];
   soundTraps = [];
   scatteredSwords = [];
