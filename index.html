@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Auto-Battler Arena - Bloodchain Update & Copycat Update</title>
+    <title>Auto-Battler Arena - Responsive Update</title>
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Teko:wght@600;700&display=swap");
 
@@ -270,6 +270,868 @@
         cursor: pointer;
         border-radius: 6px;
       }
+
+      /* ================= RESPONSIVE LAYOUT ================= */
+      html,
+      body {
+        width: 100%;
+        min-height: 100%;
+      }
+
+      body {
+        min-height: 100vh;
+        height: auto;
+      }
+
+      #selection-screen,
+      #map-screen,
+      #game-container {
+        min-width: 0;
+      }
+
+      /* Desktop/tablet: prevent the three selection columns from overflowing. */
+      #selection-screen {
+        gap: 18px;
+      }
+
+      .select-panel {
+        width: clamp(240px, 25vw, 320px);
+        min-width: 0;
+      }
+
+      #center-panel {
+        min-width: 0;
+      }
+
+      .matchup-container {
+        min-width: 0;
+      }
+
+      .preview-box {
+        width: clamp(140px, 15vw, 180px);
+        min-width: 0;
+      }
+
+      /* Map cards are generated from JS with width:160px inline.
+         !important intentionally makes them fluid without touching game logic. */
+      #map-roster {
+        width: min(760px, calc(100% - 32px));
+        display: grid !important;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 16px !important;
+      }
+
+      #map-roster > div {
+        width: 100% !important;
+        min-width: 0;
+      }
+
+      /* Keep the game simulation at its native 500x500 coordinate system,
+         but scale the rendered canvas to the available viewport width. */
+      #canvas-wrapper {
+        width: min(500px, calc(100vw - 24px));
+        height: auto;
+        aspect-ratio: 1 / 1;
+      }
+
+      #gameCanvas {
+        display: block;
+        width: 100% !important;
+        height: 100% !important;
+      }
+
+      #game-container > div:first-child,
+      #game-container > div:last-child {
+        width: min(500px, calc(100vw - 24px)) !important;
+      }
+
+      @media (max-width: 1050px) {
+        body {
+          overflow: auto;
+          align-items: flex-start;
+        }
+
+        #selection-screen {
+          position: relative;
+          width: 100%;
+          height: auto;
+          min-height: 100vh;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(240px, 0.8fr) minmax(
+              0,
+              1fr
+            );
+          align-items: stretch;
+          padding: 16px;
+        }
+
+        .select-panel,
+        #center-panel {
+          width: 100%;
+          height: auto;
+          min-height: 0;
+        }
+
+        .select-panel {
+          max-height: calc(100vh - 32px);
+        }
+
+        .roster-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .matchup-container {
+          flex-direction: column;
+          gap: 10px;
+          margin-bottom: 16px;
+        }
+
+        .preview-box {
+          width: min(100%, 180px);
+          padding: 10px;
+        }
+
+        .preview-canvas {
+          width: 72px;
+          height: 72px;
+        }
+
+        .vs-badge {
+          font-size: 34px;
+          line-height: 0.9;
+        }
+
+        .start-btn {
+          width: min(100%, 250px);
+          padding: 8px 20px;
+          font-size: 28px;
+        }
+      }
+
+      @media (max-width: 768px) {
+        body {
+          display: block;
+          overflow-x: hidden;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+
+        #selection-screen {
+          grid-template-columns: 1fr;
+          grid-template-areas:
+            "center"
+            "p1"
+            "p2";
+          gap: 14px;
+          padding: 12px;
+        }
+
+        #p1-panel {
+          grid-area: p1;
+        }
+
+        #center-panel {
+          grid-area: center;
+          padding: 12px 0 4px;
+        }
+
+        #p2-panel {
+          grid-area: p2;
+        }
+
+        .select-panel {
+          max-height: none;
+          padding: 12px;
+        }
+
+        .panel-title {
+          font-size: 24px;
+          margin-bottom: 8px;
+        }
+
+        .roster-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          overflow: visible;
+          padding-right: 0;
+        }
+
+        .char-card {
+          min-width: 0;
+          padding: 7px;
+        }
+
+        .card-canvas {
+          width: 34px;
+          height: 34px;
+        }
+
+        .card-name {
+          min-width: 0;
+          font-size: 16px;
+        }
+
+        .matchup-container {
+          flex-direction: row;
+          gap: 8px;
+          margin-bottom: 12px;
+        }
+
+        .preview-box {
+          flex: 1 1 0;
+          width: auto;
+          padding: 9px 6px;
+        }
+
+        .preview-canvas {
+          width: 58px;
+          height: 58px;
+          margin-bottom: 6px;
+        }
+
+        .preview-name {
+          width: 100%;
+          font-size: 20px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .preview-desc {
+          font-size: 11px;
+          line-height: 1.25;
+        }
+
+        .vs-badge {
+          flex: 0 0 auto;
+          font-size: 27px;
+        }
+
+        .start-btn {
+          min-height: 48px;
+          font-size: 25px;
+        }
+
+        #map-screen {
+          position: relative !important;
+          width: 100% !important;
+          min-height: 100vh !important;
+          height: auto !important;
+          padding: 24px 12px !important;
+          justify-content: flex-start !important;
+          overflow-y: auto;
+        }
+
+        #map-screen h1 {
+          margin: 0 0 18px !important;
+          font-size: 21px !important;
+          text-align: center;
+        }
+
+        #map-roster {
+          width: 100%;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px !important;
+          margin-bottom: 20px !important;
+        }
+
+        #map-screen > div:last-child {
+          width: 100%;
+          display: grid !important;
+          grid-template-columns: 1fr 1.35fr;
+          gap: 10px !important;
+        }
+
+        #map-screen button {
+          min-height: 48px;
+          padding: 10px 12px !important;
+          font-size: 14px !important;
+        }
+
+        #game-container {
+          min-height: 100vh;
+          height: auto;
+          justify-content: flex-start;
+          padding: 16px 12px 24px;
+          overflow: visible;
+        }
+
+        #game-container > div:first-child {
+          font-size: clamp(16px, 5vw, 21px) !important;
+          gap: 12px;
+        }
+
+        #game-container > div:first-child span {
+          min-width: 0;
+          max-width: 48%;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        #game-container > div:last-child {
+          gap: 10px !important;
+          margin-top: 12px !important;
+        }
+
+        #stats1,
+        #stats2 {
+          font-size: 11px !important;
+          overflow-wrap: anywhere;
+        }
+
+        #winner-title {
+          font-size: clamp(30px, 10vw, 42px);
+        }
+
+        #winner-subtitle {
+          font-size: clamp(18px, 6vw, 24px);
+          margin-bottom: 18px;
+        }
+
+        .restart-btn {
+          max-width: 85%;
+          min-height: 46px;
+          padding: 7px 16px;
+          font-size: 19px;
+        }
+      }
+
+      @media (max-width: 430px) {
+        .roster-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .char-card {
+          min-height: 48px;
+        }
+
+        #map-roster {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        #game-container > div:last-child {
+          flex-direction: column;
+        }
+
+        #game-container > div:last-child > div {
+          width: 100%;
+        }
+      }
+
+      @media (hover: none) {
+        .char-card:hover,
+        .start-btn:hover {
+          transform: none;
+        }
+      }
+
+      /* ================= MOBILE SIDE-BY-SIDE LAYOUT ================= */
+      @media (max-width: 768px) {
+        body {
+          overflow-x: auto;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+
+        #selection-screen {
+          width: 100%;
+          min-width: 0;
+          min-height: 100vh;
+          height: auto;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(110px, 0.72fr) minmax(
+              0,
+              1fr
+            );
+          grid-template-areas: "p1 center p2";
+          align-items: start;
+          gap: 7px;
+          padding: 8px;
+          overflow: visible;
+        }
+
+        #p1-panel,
+        #center-panel,
+        #p2-panel {
+          width: 100% !important;
+          min-width: 0;
+          max-width: none;
+          height: auto !important;
+        }
+
+        #p1-panel {
+          grid-area: p1;
+        }
+        #center-panel {
+          grid-area: center;
+          padding: 8px 2px 4px;
+        }
+        #p2-panel {
+          grid-area: p2;
+        }
+
+        .select-panel {
+          padding: 8px 6px;
+          border-radius: 10px;
+        }
+
+        .panel-title {
+          font-size: clamp(14px, 4vw, 20px);
+          margin-bottom: 7px;
+          white-space: nowrap;
+        }
+
+        .roster-grid {
+          grid-template-columns: 1fr;
+          gap: 5px;
+          padding: 0;
+          overflow: visible;
+        }
+
+        .char-card {
+          min-width: 0;
+          padding: 5px 4px;
+          gap: 4px;
+        }
+
+        .card-canvas {
+          width: 30px;
+          height: 30px;
+          flex: 0 0 30px;
+        }
+
+        .card-name {
+          min-width: 0;
+          font-size: clamp(11px, 2.8vw, 15px);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .matchup-container {
+          flex-direction: column;
+          gap: 5px;
+          margin-bottom: 8px;
+        }
+
+        .preview-box {
+          width: 100%;
+          min-width: 0;
+          padding: 5px 3px;
+        }
+
+        .preview-canvas {
+          width: clamp(38px, 10vw, 58px);
+          height: clamp(38px, 10vw, 58px);
+          margin-bottom: 3px;
+        }
+
+        .preview-name {
+          width: 100%;
+          font-size: clamp(11px, 3vw, 17px);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .preview-desc {
+          font-size: clamp(8px, 2vw, 11px);
+          line-height: 1.15;
+          max-height: 28px;
+          overflow: hidden;
+        }
+
+        .vs-badge {
+          font-size: clamp(17px, 5vw, 27px);
+          line-height: 1;
+        }
+
+        .start-btn {
+          width: 100%;
+          min-height: 42px;
+          padding: 6px 3px;
+          font-size: clamp(15px, 4vw, 23px);
+        }
+
+        #map-screen {
+          position: relative !important;
+          width: 100% !important;
+          min-height: 100vh !important;
+          height: auto !important;
+          padding: 20px 10px !important;
+          justify-content: flex-start !important;
+          overflow-y: auto;
+        }
+
+        #game-container {
+          min-height: 100vh;
+          overflow-x: hidden;
+          overflow-y: auto;
+          padding: 8px 0 16px;
+        }
+      }
+
+      @media (max-width: 430px) {
+        #selection-screen {
+          grid-template-columns: minmax(0, 1fr) minmax(82px, 0.55fr) minmax(
+              0,
+              1fr
+            );
+          gap: 4px;
+          padding: 5px;
+        }
+
+        .select-panel {
+          padding: 6px 3px;
+        }
+
+        .panel-title {
+          font-size: 12px;
+        }
+
+        .card-canvas {
+          width: 25px;
+          height: 25px;
+          flex-basis: 25px;
+        }
+
+        .card-name {
+          font-size: 10px;
+        }
+
+        .preview-canvas {
+          width: 34px;
+          height: 34px;
+        }
+
+        .preview-name {
+          font-size: 10px;
+        }
+
+        .preview-desc {
+          display: none;
+        }
+
+        .vs-badge {
+          font-size: 15px;
+        }
+
+        .start-btn {
+          min-height: 36px;
+          font-size: 13px;
+        }
+      }
+
+      /* ================= FINAL MOBILE UX ================= */
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        min-height: 100%;
+        overflow: hidden !important;
+      }
+
+      @media (max-width: 768px) {
+        body {
+          overflow: hidden !important;
+        }
+
+        #selection-screen {
+          width: 100vw !important;
+          height: 100dvh !important;
+          min-height: 0 !important;
+          max-height: 100dvh !important;
+          box-sizing: border-box;
+          grid-template-rows: minmax(0, 1fr);
+          align-items: stretch !important;
+          overflow: hidden !important;
+          padding: 6px !important;
+        }
+
+        #p1-panel,
+        #p2-panel {
+          height: calc(100dvh - 12px) !important;
+          max-height: calc(100dvh - 12px) !important;
+          min-height: 0 !important;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden !important;
+        }
+
+        #center-panel {
+          height: calc(100dvh - 12px) !important;
+          max-height: calc(100dvh - 12px) !important;
+          min-height: 0 !important;
+          display: flex;
+          flex-direction: column;
+          justify-content: center !important;
+          align-items: stretch;
+          padding: 8px 2px !important;
+          box-sizing: border-box;
+        }
+
+        /* Hanya daftar karakter yang boleh scroll */
+        #p1-roster,
+        #p2-roster {
+          flex: 1 1 auto;
+          min-height: 0;
+          overflow-y: auto !important;
+          overflow-x: hidden !important;
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior: contain;
+          scrollbar-width: thin;
+          padding-right: 2px;
+        }
+
+        .matchup-container {
+          flex: 0 0 auto;
+          margin: 0 !important;
+          justify-content: center;
+        }
+
+        .start-btn {
+          flex: 0 0 auto;
+          margin-top: 10px;
+        }
+
+        #map-screen {
+          width: 100vw !important;
+          height: 100dvh !important;
+          min-height: 0 !important;
+          max-height: 100dvh !important;
+          overflow: hidden !important;
+          box-sizing: border-box;
+          padding: 12px 8px !important;
+        }
+
+        #game-container {
+          width: 100vw !important;
+          height: 100dvh !important;
+          min-height: 0 !important;
+          max-height: 100dvh !important;
+          overflow: hidden !important;
+          box-sizing: border-box;
+        }
+      }
+
+      @media (max-width: 430px) {
+        #selection-screen {
+          padding: 4px !important;
+          grid-template-columns: minmax(0, 1fr) minmax(76px, 0.55fr) minmax(
+              0,
+              1fr
+            ) !important;
+          gap: 4px !important;
+        }
+
+        #p1-panel,
+        #p2-panel,
+        #center-panel {
+          height: calc(100dvh - 8px) !important;
+          max-height: calc(100dvh - 8px) !important;
+        }
+
+        #center-panel {
+          justify-content: center !important;
+        }
+      }
+
+      /* ================= MINIMAL MOBILE SCROLL ================= */
+      @media (max-width: 768px) {
+        html,
+        body {
+          width: 100%;
+          height: 100%;
+          min-height: 100%;
+          overflow: hidden !important;
+        }
+
+        #selection-screen {
+          width: 100vw !important;
+          height: 100vh !important;
+          min-height: 0 !important;
+          max-height: 100vh !important;
+          overflow: hidden !important;
+          box-sizing: border-box;
+          align-items: stretch;
+        }
+
+        #p1-panel,
+        #p2-panel {
+          height: calc(100vh - 16px) !important;
+          max-height: calc(100vh - 16px) !important;
+          min-height: 0 !important;
+          overflow: hidden !important;
+          display: flex;
+          flex-direction: column;
+        }
+
+        #p1-panel .roster-grid,
+        #p2-panel .roster-grid {
+          flex: 1 1 auto;
+          min-height: 0;
+          max-height: none;
+          overflow-y: auto !important;
+          overflow-x: hidden !important;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+          overscroll-behavior: contain;
+          touch-action: pan-y;
+        }
+
+        #p1-panel .roster-grid::-webkit-scrollbar,
+        #p2-panel .roster-grid::-webkit-scrollbar {
+          display: none;
+          width: 0;
+          height: 0;
+        }
+
+        #center-panel {
+          height: 100vh !important;
+          min-height: 0 !important;
+          display: flex !important;
+          flex-direction: column;
+          justify-content: center !important;
+          align-items: center;
+          overflow: hidden !important;
+        }
+      }
+
+      /* ================= MAP + IN-GAME FINAL MOBILE UX ================= */
+      #map-roster {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+      #map-roster::-webkit-scrollbar {
+        display: none;
+        width: 0;
+        height: 0;
+      }
+
+      #game-container {
+        box-sizing: border-box;
+        padding: 18px 12px;
+        gap: 0;
+      }
+
+      @media (max-width: 768px) {
+        /* Map: one horizontal row of compact cards, swipe left/right */
+        #map-screen {
+          display: none;
+          height: 100dvh !important;
+          min-height: 0 !important;
+          max-height: 100dvh !important;
+          padding: 18px 10px 20px !important;
+          box-sizing: border-box;
+          justify-content: center !important;
+          align-items: center !important;
+          overflow: hidden !important;
+        }
+
+        #map-screen h1 {
+          flex: 0 0 auto;
+          margin: 0 0 16px !important;
+          font-size: clamp(18px, 5vw, 24px) !important;
+        }
+
+        #map-roster {
+          display: flex !important;
+          flex: 0 0 auto;
+          width: 100% !important;
+          max-width: 100%;
+          grid-template-columns: none !important;
+          gap: 10px !important;
+          margin: 0 0 18px !important;
+          padding: 4px 2px 8px !important;
+          overflow-x: auto !important;
+          overflow-y: hidden !important;
+          scroll-snap-type: x proximity;
+          touch-action: pan-x;
+          overscroll-behavior-x: contain;
+          -webkit-overflow-scrolling: touch;
+        }
+
+        #map-roster > div {
+          flex: 0 0 150px !important;
+          width: 150px !important;
+          min-width: 150px !important;
+          scroll-snap-align: start;
+        }
+
+        /* Buttons: MULAI on top, KEMBALI underneath, centered */
+        #map-screen > div:last-child {
+          width: min(240px, 72vw) !important;
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: stretch !important;
+          justify-content: center !important;
+          gap: 9px !important;
+          margin: 0 auto !important;
+        }
+
+        #map-screen button {
+          width: 100% !important;
+          min-height: 44px;
+          margin: 0 !important;
+        }
+
+        /* Keep the actual game visually centered with balanced top/bottom space */
+        #game-container {
+          width: 100vw !important;
+          height: 100dvh !important;
+          min-height: 0 !important;
+          max-height: 100dvh !important;
+          padding: 18px 12px 22px !important;
+          box-sizing: border-box;
+          overflow: hidden !important;
+          justify-content: center !important;
+          align-items: center !important;
+        }
+
+        #game-container > div:first-child {
+          width: min(500px, calc(100vw - 24px)) !important;
+          margin: 0 0 9px !important;
+        }
+
+        #canvas-wrapper {
+          margin: 0 auto !important;
+        }
+
+        #game-container > div:last-child {
+          width: min(500px, calc(100vw - 24px)) !important;
+          margin: 10px 0 0 !important;
+        }
+      }
+
+      @media (max-width: 430px) {
+        #map-screen {
+          padding: 14px 8px 16px !important;
+        }
+
+        #map-roster {
+          gap: 8px !important;
+          margin-bottom: 15px !important;
+        }
+
+        #map-roster > div {
+          flex-basis: 135px !important;
+          width: 135px !important;
+          min-width: 135px !important;
+        }
+
+        #map-screen > div:last-child {
+          width: min(220px, 70vw) !important;
+        }
+
+        #map-screen button {
+          min-height: 42px;
+          font-size: 13px !important;
+        }
+
+        #game-container {
+          padding: 14px 8px 18px !important;
+        }
+      }
     </style>
   </head>
   <body>
@@ -351,20 +1213,6 @@
       ></div>
       <div style="display: flex; gap: 15px">
         <button
-          onclick="backToCharSelect()"
-          style="
-            padding: 12px 25px;
-            font-weight: bold;
-            cursor: pointer;
-            background: #444;
-            color: white;
-            border: none;
-            border-radius: 6px;
-          "
-        >
-          KEMBALI
-        </button>
-        <button
           onclick="confirmStartGame()"
           style="
             padding: 12px 35px;
@@ -378,6 +1226,21 @@
           "
         >
           MULAI BERTARUNG!
+        </button>
+
+        <button
+          onclick="backToCharSelect()"
+          style="
+            padding: 12px 25px;
+            font-weight: bold;
+            cursor: pointer;
+            background: #444;
+            color: white;
+            border: none;
+            border-radius: 6px;
+          "
+        >
+          KEMBALI
         </button>
       </div>
     </div>

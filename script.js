@@ -31,7 +31,7 @@ const characterDB = {
     ultName: "BANKAI: BLOOD CHAIN",
     ultColor: "#b11226",
     desc: "Permanent Bankai",
-    ultMax: 7000,
+    ultMax: 10000,
   },
   Copycat: {
     color: "#ffffff",
@@ -551,9 +551,9 @@ class Projectile {
           target.iFrames = 12;
           this.hitTargets.add(target);
           if (this.owner && this.owner.name === "Stasis") {
-            this.owner.atkSpeed += 0.01;
+            this.owner.atkSpeed += 0.02;
             this.owner.ultCharge = Math.min(this.owner.ultMax, this.owner.ultCharge + 60);
-            spawnText("+0.01 Spd | -1s CD", this.owner.x, this.owner.y - 28, "#00d2d3");
+            spawnText("+0.02 Spd | -1s CD", this.owner.x, this.owner.y - 28, "#00d2d3");
           }
           spawnText("-" + finalDmg.toFixed(1), target.x, target.y - 12, "#00d2d3");
           effects.push({ type: "slash", x: this.x, y: this.y, life: 10, angle: this.angle });
@@ -1372,7 +1372,8 @@ class Ball {
       if (target.iFrames === 0 || this.isUltActive) {
         let finalDmg = target.takeDamage(this.damage, this);
         target.iFrames = 15;
-        this.damage = Math.max(2.0, this.damage - 0.8);
+        // Retaliation damage is a one-hit charge: after the hit, reset to base damage.
+        this.damage = 2.0;
         if (!this.isUltActive) {
           this.ultCharge = Math.min(this.ultMax, this.ultCharge + 100);
           spawnText("+100 Ult!", this.x, this.y - 25, "#00d2d3");
@@ -2241,7 +2242,7 @@ class Ball {
             if (!enemy.lastInkHitTime || Date.now() - enemy.lastInkHitTime >= 200) {
               enemy.lastInkHitTime = Date.now();
               let finalDmg = enemy.takeDamage(this.damage, this);
-              this.damage += 0.01;
+              this.damage += 0.04;
               spawnText("-" + finalDmg.toFixed(2), enemy.x, enemy.y - 12, "#362F4F");
             }
           }
