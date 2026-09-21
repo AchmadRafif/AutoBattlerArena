@@ -103,6 +103,20 @@ const characterDB = {
     desc: "Valhalla Regen Aura",
     ultMax: 300,
   },
+  Tyrant: {
+    color: "#a4c8e1",
+    hp: 100,
+    damage: 1.0,
+    speed: 2.2,
+    weapons: 1,
+    wLen: 65,
+    wWidth: 12,
+    rotSpeed: 0.03,
+    ultName: "CHAIN OF TYRANNY",
+    ultColor: "#a4c8e1",
+    desc: "36 Portals, Seeking Swords & Sure-Hit Chain",
+    ultMax: 5000,
+  },
   Vessel: {
     color: "#c0392b",
     hp: 50,
@@ -241,7 +255,7 @@ const characterDB = {
     ultName: "UNLIMITED VOID",
     ultColor: "#4B0082",
     desc: "Six Eyes, Mugen, Hollow Purple",
-    ultMax: 5000,
+    ultMax: 2500,
   },
 };
 
@@ -299,7 +313,16 @@ function goToMapSelect() {
 
 function backToCharSelect() {
   document.getElementById("map-screen").style.display = "none";
-  document.getElementById("selection-screen").style.display = "flex";
+
+  // Clear the inline display value so the responsive CSS can restore
+  // the correct desktop/mobile layout (grid on mobile, flex on desktop).
+  const selectionScreen = document.getElementById("selection-screen");
+  selectionScreen.style.display = "";
+
+  // Reset roster scroll positions when returning from map selection.
+  document.querySelectorAll("#p1-roster, #p2-roster").forEach((roster) => {
+    roster.scrollTop = 0;
+  });
 }
 
 function renderMapRoster() {
@@ -384,6 +407,8 @@ let soundTraps = [];
 let scatteredSwords = [];
 let killerQueenSkills = [];
 let bloodchainSkills = [];
+let tyrantPortals = [];
+let tyrantSwords = [];
 
 class ScatteredSword {
   constructor(x, y) {
@@ -545,8 +570,28 @@ class Projectile {
     this.life--;
     balls.forEach((target) => {
       if (target !== this.owner && target.team !== this.owner.team && target.hp > 0) {
-        let dist = Math.hypot(target.x - this.x, target.y - this.y);
-        if (dist < target.radius + 10 && !this.hitTargets.has(target)) {
+        // Stasis kunai and Copycat's copied Time Shot use an exact 50x15 rotated-rectangle hitbox.
+        // Other Projectile users keep the original circular hitbox.
+        let isStasisKunai = this.owner && (this.owner.name === "Stasis" || this.owner.name === "Copycat");
+        let hit = false;
+        if (isStasisKunai) {
+          const relX = target.x - this.x;
+          const relY = target.y - this.y;
+          const cosA = Math.cos(this.angle);
+          const sinA = Math.sin(this.angle);
+          const localX = relX * cosA + relY * sinA;
+          const localY = -relX * sinA + relY * cosA;
+          const halfLength = 50 / 2;
+          const halfWidth = 15 / 2;
+          const closestX = Math.max(-halfLength, Math.min(halfLength, localX));
+          const closestY = Math.max(-halfWidth, Math.min(halfWidth, localY));
+          const hitDist = Math.hypot(localX - closestX, localY - closestY);
+          hit = hitDist < target.radius;
+        } else {
+          let dist = Math.hypot(target.x - this.x, target.y - this.y);
+          hit = dist < target.radius + 10;
+        }
+        if (hit && !this.hitTargets.has(target)) {
           let finalDmg = target.takeDamage(this.damage, this.owner, true);
           target.iFrames = 12;
           this.hitTargets.add(target);
@@ -568,15 +613,28 @@ class Projectile {
     ctx.rotate(this.angle);
     ctx.shadowColor = "#00d2d3";
     ctx.shadowBlur = this.frozenInTime || this.delayTimer > 0 ? 12 : 5;
-    ctx.fillStyle = "#3d2b56";
-    ctx.fillRect(-12, -3, 9, 6);
-    ctx.fillStyle = "#ffffff";
-    ctx.beginPath();
-    ctx.moveTo(-3, -5);
-    ctx.lineTo(14, 0);
-    ctx.lineTo(-3, 5);
-    ctx.closePath();
-    ctx.fill();
+    if (this.owner && (this.owner.name === "Stasis" || this.owner.name === "Copycat")) {
+      // Stasis kunai size (also used by Copycat's copied Time Shot): exact 50px x 15px overall bounds.
+      ctx.fillStyle = "#3d2b56";
+      ctx.fillRect(-25, -7.5, 12, 15);
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.moveTo(-13, -7.5);
+      ctx.lineTo(25, 0);
+      ctx.lineTo(-20.5, 7.5);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      ctx.fillStyle = "#3d2b56";
+      ctx.fillRect(-12, -3, 9, 6);
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.moveTo(-3, -5);
+      ctx.lineTo(14, 0);
+      ctx.lineTo(-3, 5);
+      ctx.closePath();
+      ctx.fill();
+    }
     ctx.strokeStyle = "#00d2d3";
     ctx.lineWidth = 1.8;
     ctx.stroke();
@@ -951,7 +1009,7 @@ class BitesTheDustBomb {
 }
 
 class BloodchainGetsuga {
-  constructor(owner, target, wave) {
+  constructor(owner, target, wave, color = "#f1c40f") {
     this.owner = owner; this.wave = wave; this.life = 240; this.maxLife = 240;
     this.angle = target ? Math.atan2(target.y - owner.y, target.x - owner.x) : owner.angle;
     this.speed = 5.5;
@@ -960,6 +1018,7 @@ class BloodchainGetsuga {
     this.radius = wave === 1 ? 34 : 24;
     this.hitTargets = new Set();
     this.damage = owner.damage * 1;
+    this.color = color;
   }
   update() {
     this.x += Math.cos(this.angle) * this.speed;
@@ -979,21 +1038,105 @@ class BloodchainGetsuga {
         // all accumulated +2 damage remains added at 1x.
         this.owner.bloodchainBonusDamage += 1;
         this.owner.refreshBloodchainDamage();
-        spawnText("GJ +2 DMG (-" + dmg.toFixed(1) + ")", b.x, b.y - 18, "#f1c40f");
+        spawnText("GJ +2 DMG (-" + dmg.toFixed(1) + ")", b.x, b.y - 18, this.color);
       }
     });
   }
   draw() {
     let p = this.life / this.maxLife, big = this.wave === 1;
     ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.angle);
-    ctx.shadowColor = "#f1c40f"; ctx.shadowBlur = 16;
+    ctx.shadowColor = this.color; ctx.shadowBlur = 16;
     ctx.fillStyle = `rgba(18, 18, 18, ${Math.min(1, p + 0.2)})`;
     ctx.beginPath();
     ctx.moveTo(30, 0);
     ctx.quadraticCurveTo(big ? 6 : 10, big ? -34 : -22, big ? -42 : -28, 0);
     ctx.quadraticCurveTo(big ? 6 : 10, big ? 34 : 22, 30, 0);
     ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = "#f1c40f"; ctx.lineWidth = big ? 4 : 2.5; ctx.stroke();
+    ctx.strokeStyle = this.color; ctx.lineWidth = big ? 4 : 2.5; ctx.stroke();
+    ctx.restore();
+  }
+}
+
+class CopycatGetsugaJujisho extends BloodchainGetsuga {
+  constructor(owner, target, wave) {
+    super(owner, target, wave, "#FF76CE");
+  }
+  update() {
+    this.x += Math.cos(this.angle) * this.speed;
+    this.y += Math.sin(this.angle) * this.speed;
+    this.life--;
+    balls.forEach((b) => {
+      if (b === this.owner || b.team === this.owner.team || b.hp <= 0 || this.hitTargets.has(b)) return;
+      if (Math.hypot(b.x - this.x, b.y - this.y) < b.radius + this.radius) {
+        this.hitTargets.add(b);
+        const dmg = b.takeDamage(this.damage, this.owner, true);
+        spawnText("COPY GJ (-" + dmg.toFixed(1) + ")", b.x, b.y - 18, this.color);
+      }
+    });
+  }
+}
+
+class CopycatGetsugaTensho {
+  constructor(owner, target) {
+    this.owner = owner;
+    this.target = target;
+    this.x = canvas.width / 2;
+    this.y = canvas.height / 2;
+    this.angle = owner.angle;
+    this.slashLife = 34;
+    this.residueLife = 120;
+    this.life = this.slashLife + this.residueLife;
+    this.maxLife = this.life;
+    this.radius = Math.min(canvas.width, canvas.height) * 0.47;
+    this.hitResolved = false;
+    this.color = "#FF76CE";
+  }
+  update() {
+    const wasSlash = this.life > this.residueLife;
+    this.life--;
+    if (wasSlash && !this.hitResolved) {
+      this.hitResolved = true;
+      const target = this.target && this.target.hp > 0 && this.target.team !== this.owner.team
+        ? this.target
+        : balls.find((b) => b.team !== this.owner.team && b.hp > 0 && !b.isClone) || balls.find((b) => b.team !== this.owner.team && b.hp > 0);
+      if (target) {
+        const currentHp = Math.max(0, target.hp);
+        const dmg = target.takeDamage(currentHp * 0.30, this.owner, true);
+        spawnText("COPY TENSHŌ -30% HP (-" + dmg.toFixed(1) + ")", target.x, target.y - 18, this.color);
+        effects.push({ type: "copycat_tensho_hit", x: target.x, y: target.y, life: 24, maxLife: 24, color: this.color });
+      }
+    }
+  }
+  draw() {
+    const slashActive = this.life > this.residueLife;
+    const fade = slashActive ? 1 : Math.max(0.08, Math.min(1, this.life / this.residueLife));
+    const start = Math.PI * 0.72;
+    const end = Math.PI * 2.28;
+    const r = this.radius;
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+    ctx.lineCap = "round";
+    ctx.shadowColor = `rgba(255,118,206,${0.95 * fade})`;
+    ctx.shadowBlur = r * 0.14;
+    ctx.strokeStyle = `rgba(255,118,206,${0.22 * fade})`;
+    ctx.lineWidth = r * 0.30;
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.98, start, end); ctx.stroke();
+    ctx.shadowColor = `rgba(255,220,245,${0.8 * fade})`;
+    ctx.shadowBlur = r * 0.08;
+    ctx.strokeStyle = `rgba(255,220,245,${0.35 * fade})`;
+    ctx.lineWidth = r * 0.13;
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.995, start, end); ctx.stroke();
+    ctx.shadowColor = `rgba(255,118,206,${0.98 * fade})`;
+    ctx.shadowBlur = r * 0.055;
+    ctx.strokeStyle = `rgba(255,118,206,${0.98 * fade})`;
+    ctx.lineWidth = r * 0.115;
+    ctx.beginPath(); ctx.arc(0, 0, r, start, end); ctx.stroke();
+    ctx.shadowColor = `rgba(255,245,252,${0.9 * fade})`;
+    ctx.shadowBlur = r * 0.035;
+    ctx.strokeStyle = `rgba(255,245,252,${0.9 * fade})`;
+    ctx.lineWidth = r * 0.025;
+    ctx.beginPath(); ctx.arc(0, 0, r * 1.002, start, end); ctx.stroke();
     ctx.restore();
   }
 }
@@ -1193,6 +1336,136 @@ class BloodchainGetsugaTensho {
   }
 }
 
+function isStasisTimeStopped() {
+  return balls.some((b) => b && b.name === "Stasis" && b.isUltActive && b.hp > 0);
+}
+
+class TyrantPortal {
+  constructor(x, y, owner, index, life = Infinity) {
+    this.x = x; this.y = y; this.owner = owner; this.index = index;
+    this.phase = (index / 36) * Math.PI * 2;
+    this.fireTimer = Math.floor((index / 36) * (60 / Math.max(0.1, owner.atkSpeed)));
+    this.life = life;
+    this.maxLife = life;
+    this.temporary = Number.isFinite(life);
+  }
+  update() {
+    if (!this.owner || this.owner.hp <= 0) { this.life = 0; return; }
+    // Stasis Time Stop freezes the portal completely: no firing and no lifetime countdown.
+    if (isStasisTimeStopped()) return;
+    if (this.temporary) {
+      this.life--;
+      if (this.life <= 0) {
+        if (this.owner.tyrantPortalSlots) this.owner.tyrantPortalSlots.delete(this.index);
+        return;
+      }
+    }
+    this.fireTimer--;
+    if (this.fireTimer <= 0) {
+      const target = balls.find((b) => b.team !== this.owner.team && b.hp > 0 && !b.isClone)
+        || balls.find((b) => b.team !== this.owner.team && b.hp > 0);
+      if (target) tyrantSwords.push(new TyrantPortalSword(this.x, this.y, target, this.owner));
+      this.fireTimer = Math.max(4, Math.round(60 / Math.max(0.1, this.owner.atkSpeed)));
+    }
+  }
+  draw() {
+    const pulse = 1 + Math.sin(Date.now() * 0.012 + this.phase) * 0.10;
+    const portalColor = this.owner && this.owner.name === "Copycat" ? "#FF76CE" : "#a4c8e1";
+    ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(Date.now() * 0.001 + this.phase);
+    ctx.globalAlpha = this.temporary ? Math.min(0.88, 0.25 + 0.63 * Math.min(1, this.life / 60)) : 0.88;
+    ctx.shadowColor = portalColor; ctx.shadowBlur = 14;
+    ctx.strokeStyle = portalColor; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(0, 0, 15 * pulse, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(0, 0, 9 * pulse, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+class TyrantPortalSword {
+  constructor(x, y, target, owner) {
+    this.x=x; this.y=y; this.target=target; this.owner=owner;
+    this.speed=8.5*Math.max(0.75, owner.atkSpeed); this.damage=1.0; this.life=180;
+    this.hitTargets=new Set(); this.angle=Math.atan2(target.y-y,target.x-x);
+  }
+  update() {
+    if (!this.owner || this.owner.hp <= 0) { this.life=0; return; }
+    // Already-fired swords are also frozen mid-flight and resume when Time Stop ends.
+    if (isStasisTimeStopped()) return;
+    const dist = this.target ? Math.hypot(this.target.x-this.x, this.target.y-this.y) : Infinity;
+    // NERF: the sword locks its firing direction when it leaves the portal.
+    // It keeps moving straight and never turns to follow the target.
+    this.x += Math.cos(this.angle) * this.speed;
+    this.y += Math.sin(this.angle) * this.speed;
+    this.life--;
+    if (this.target && this.target.hp > 0 && dist < this.target.radius+10 && !this.hitTargets.has(this.target)) {
+      this.hitTargets.add(this.target);
+      const dmg=this.target.takeDamage(this.damage,this.owner,true);
+      tyrantRegisterHit(this.owner,this.target,dmg,true);
+      effects.push({type:"tyrant_sword_hit",x:this.target.x,y:this.target.y,life:12,maxLife:12});
+      this.life=0;
+    }
+  }
+  draw() {
+    const swordColor = this.owner && this.owner.name === "Copycat" ? "#FF76CE" : "#dfefff";
+    const swordStroke = this.owner && this.owner.name === "Copycat" ? "#d84fa8" : "#7fa8c7";
+    ctx.save(); ctx.translate(this.x,this.y); ctx.rotate(this.angle); ctx.shadowColor=swordColor; ctx.shadowBlur=10;
+    // Enlarged to match Tyrant's held sword: 65px long and 12px wide.
+    ctx.fillStyle=swordColor; ctx.beginPath(); ctx.moveTo(32.5,0); ctx.lineTo(-25,-10); ctx.lineTo(-32.5,0); ctx.lineTo(-25,10); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle=swordStroke; ctx.lineWidth=2; ctx.stroke(); ctx.fillStyle="#657b8b"; ctx.fillRect(-27,-3,12,6); ctx.restore();
+  }
+}
+
+function openRandomTyrantPortal(owner, temporaryLife = Infinity) {
+  if (!owner || (owner.name !== "Tyrant" && owner.name !== "Copycat") || owner.isClone || owner.hp <= 0) return;
+
+  // There are exactly 36 valid edge-tile slots. Each successful BASIC sword hit
+  // opens only ONE unused random slot. A slot can never be reused by this Tyrant.
+  if (!owner.tyrantPortalSlots) owner.tyrantPortalSlots = new Set();
+  if (owner.tyrantPortalSlots.size >= 36) return;
+
+  const unused = [];
+  for (let i = 0; i < 36; i++) {
+    if (!owner.tyrantPortalSlots.has(i)) unused.push(i);
+  }
+  if (!unused.length) return;
+
+  const index = unused[Math.floor(Math.random() * unused.length)];
+  owner.tyrantPortalSlots.add(index);
+
+  const inset = 22;
+  const perimeter = 2 * ((canvas.width - 2 * inset) + (canvas.height - 2 * inset));
+  const d = (index / 36) * perimeter;
+  const top = canvas.width - 2 * inset;
+  const side = canvas.height - 2 * inset;
+  let x, y;
+
+  if (d < top) {
+    x = inset + d; y = inset;
+  } else if (d < top + side) {
+    x = canvas.width - inset; y = inset + (d - top);
+  } else if (d < 2 * top + side) {
+    x = canvas.width - inset - (d - top - side); y = canvas.height - inset;
+  } else {
+    x = inset; y = canvas.height - inset - (d - 2 * top - side);
+  }
+
+  tyrantPortals.push(new TyrantPortal(x, y, owner, index, temporaryLife));
+  const portalColor = owner.name === "Copycat" ? "#FF76CE" : "#a4c8e1";
+  spawnText(`PORTAL ${owner.tyrantPortalSlots.size}/36`, x, y - 18, portalColor);
+}
+function tyrantRegisterHit(owner,target,damage,fromPortal=false) {
+  if(!owner||owner.name!=="Tyrant"||!target) return;
+  if(!owner.isUltActive) owner.ultCharge=Math.min(owner.ultMax,owner.ultCharge+50);
+  spawnText(fromPortal?"PORTAL SWORD! +50 ULT":"+50 ULT",target.x,target.y-28,"#a4c8e1");
+}
+function triggerTyrantChainUlt(owner) {
+  const target=balls.find((b)=>b.team!==owner.team&&b.hp>0&&!b.isClone)||balls.find((b)=>b.team!==owner.team&&b.hp>0);
+  owner.ultCharge=0; owner.isUltActive=true; owner.bonusText="CHAIN OF TYRANNY!";
+  if(target){ target.stunTimer=Math.max(target.stunTimer,300); target.tyrantChainedBy=owner; effects.push({type:"tyrant_chains",target,owner,life:300,maxLife:300}); spawnText("CHAINED! 5s",target.x,target.y-38,"#a4c8e1"); }
+  setTimeout(()=>{if(owner&&owner.hp>0){owner.isUltActive=false;owner.bonusText="";}},450);
+}
+
 class Ball {
   constructor(team, name, x, y, isClone = false) {
     let stats = characterDB[name] || characterDB["Copycat"];
@@ -1242,6 +1515,9 @@ class Ball {
     this.momentumCombatTimer = 0;
     this.stunTimer = 0;
     this.knockbackTimer = 0;
+    this.tyrantPortalsActive = false;
+    this.tyrantPortalSlots = new Set();
+    this.tyrantChainedBy = null;
     this.zoneRadius = 140;
     this.combatTimer = 0;
     this.shootCooldown = 0;
@@ -1467,6 +1743,12 @@ class Ball {
         ctx.fill();
       }
       ctx.restore();
+    }
+
+    if (this.tyrantChainedBy && this.tyrantChainedBy.hp > 0 && this.stunTimer > 0) {
+      this.vx=0; this.vy=0;
+    } else if (this.tyrantChainedBy && this.stunTimer<=0) {
+      this.tyrantChainedBy=null;
     }
 
     if (this.name === "Killer Queen") {
@@ -1784,6 +2066,7 @@ class Ball {
         if (this.name === "Illustrade") ctx.strokeStyle = "#362F4F";
         if (this.name === "Vessel") ctx.strokeStyle = "#8b0000";
         if (this.name === "Valkyrie") ctx.strokeStyle = "#87ceeb";
+        if (this.name === "Tyrant") ctx.strokeStyle = "#a4c8e1";
         if (this.name === "Retaliator") ctx.strokeStyle = "#00d2d3";
         ctx.lineCap = "round";
         ctx.stroke();
@@ -1958,7 +2241,7 @@ class Ball {
         this.copycatPassiveTimer = 0;
         let enemy = balls.find((b) => b.team !== this.team && b.hp > 0);
         if (enemy) {
-          let skillType = Math.floor(Math.random() * 8);
+          let skillType = Math.floor(Math.random() * 10);
           if (skillType === 0) {
             enemy.stunTimer = 40;
             spawnText("COPY: CURSED SPEECH!", enemy.x, enemy.y - 25, "#FF76CE");
@@ -1995,6 +2278,20 @@ class Ball {
               enemy.kqBombStacks.push(new KillerQueenBomb(this, enemy));
               spawnText("COPY: KILLER QUEEN BOMB!", enemy.x, enemy.y - 25, "#FF76CE");
             }
+          } else if (skillType === 8) {
+            // Copycat can randomly imitate Tyrant's portal passive without landing a hit.
+            // This copied portal is temporary and expires after the same lifetime used by
+            // Copycat's special clones.
+            openRandomTyrantPortal(this, 1000);
+            spawnText("COPY: TYRANT PORTAL!", this.x, this.y - 25, "#FF76CE");
+          } else if (skillType === 9) {
+            // Copycat's passive version of Getsuga Jūjishō: two pink crescent waves.
+            this.angle = Math.atan2(enemy.y - this.y, enemy.x - this.x);
+            projectiles.push(new CopycatGetsugaJujisho(this, enemy, 1));
+            setTimeout(() => {
+              if (this.hp > 0 && enemy.hp > 0) projectiles.push(new CopycatGetsugaJujisho(this, enemy, 2));
+            }, 120);
+            spawnText("COPY: GETSUGA JŪJISHŌ!", this.x, this.y - 25, "#FF76CE");
           }
         }
       }
@@ -2007,7 +2304,7 @@ class Ball {
             scatteredSwords.splice(i, 1);
             let enemy = balls.find((b) => b.team !== this.team && b.hp > 0);
             if (enemy) {
-              let ultType = Math.floor(Math.random() * 10);
+              let ultType = Math.floor(Math.random() * 12);
 
               if (ultType === 0) {
                 enemy.stunTimer = 180;
@@ -2074,6 +2371,27 @@ class Ball {
                 // to the selected enemy, using the existing BTD implementation.
                 killerQueenSkills.push(new BitesTheDustBomb(this, enemy));
                 spawnText("[KILLER QUEEN] BITES THE DUST!", enemy.x, enemy.y - 30, "#FF76CE");
+              } else if (ultType === 10) {
+                // Randomize can also copy Tyrant's sure-hit 5-second chain ultimate.
+                // The Copycat version keeps the same four-corner chain animation, but
+                // uses Copycat's signature pink aura.
+                enemy.stunTimer = Math.max(enemy.stunTimer, 300);
+                enemy.tyrantChainedBy = this;
+                effects.push({
+                  type: "tyrant_chains",
+                  target: enemy,
+                  owner: this,
+                  color: "#FF76CE",
+                  life: 300,
+                  maxLife: 300
+                });
+                spawnText("[TYRANT] CHAIN OF TYRANNY! 5s", enemy.x, enemy.y - 30, "#FF76CE");
+              } else if (ultType === 11) {
+                // Copycat's ultimate version of Getsuga Tenshō.
+                // It is sure-hit and deals 30% of the target's current HP at cast time.
+                this.angle = Math.atan2(enemy.y - this.y, enemy.x - this.x);
+                bloodchainSkills.push(new CopycatGetsugaTensho(this, enemy));
+                spawnText("[COPYCAT] GETSUGA TENSHŌ!", this.x, this.y - 30, "#FF76CE");
               }
 
               if (isNaN(this.vx) || isNaN(this.vy) || Math.hypot(this.vx, this.vy) < 0.5) {
@@ -2427,6 +2745,10 @@ class Ball {
     }
 
     if (this.isUltActive && this.name === "Valkyrie") this.hp = Math.min(this.maxHp, this.hp + 0.4);
+
+    if (gameState === "playing" && !this.isClone && this.name === "Tyrant" && !this.isUltActive && this.ultCharge >= this.ultMax) {
+      triggerTyrantChainUlt(this);
+    }
   }
 
   refreshBloodchainDamage() {
@@ -2459,6 +2781,10 @@ class Ball {
     }
 
     this.isUltActive = true;
+    if (this.name === "Tyrant") {
+      triggerTyrantChainUlt(this);
+      return;
+    }
     if (this.name === "Vessel") {
       this.bonusText = "DETERMINED!";
       return;
@@ -2684,8 +3010,10 @@ function checkPhysicsAndHits() {
       let dx = B.x - A.x, dy = B.y - A.y;
       let dist = Math.sqrt(dx * dx + dy * dy);
       let isEnemy = A.team !== B.team;
-      let aCanParry = !(A.name === "Retaliator" && A.isUltActive);
-      let bCanParry = !(B.name === "Retaliator" && B.isUltActive);
+      // Retaliator adalah counter-attack murni: tidak pernah bisa parry
+      // dan tidak pernah bisa diparry, baik saat ult maupun normal.
+      let aCanParry = A.name !== "Retaliator";
+      let bCanParry = B.name !== "Retaliator";
 
       if (isEnemy && A.weapons > 0 && B.weapons > 0 && A.parryCooldown === 0 && B.parryCooldown === 0 && aCanParry && bCanParry) {
         let parryHit = false;
@@ -2728,6 +3056,10 @@ function checkPhysicsAndHits() {
               A.rotSpeed *= -1;
               let finalDmg = B.takeDamage(A.damage, A);
               B.iFrames = 60;
+              if (A.name === "Tyrant") {
+                openRandomTyrantPortal(A);
+                tyrantRegisterHit(A, B, finalDmg, false);
+              }
               if (A.name === "Juggernaut") {
                 A.momentum = Math.min(100, A.momentum + 5);
                 A.momentumCombatTimer = 300;
@@ -2784,6 +3116,10 @@ function checkPhysicsAndHits() {
               B.rotSpeed *= -1;
               let finalDmg = A.takeDamage(B.damage, B);
               A.iFrames = 60;
+              if (B.name === "Tyrant") {
+                openRandomTyrantPortal(B);
+                tyrantRegisterHit(B, A, finalDmg, false);
+              }
               if (B.name === "Juggernaut") {
                 B.momentum = Math.min(100, B.momentum + 5);
                 B.momentumCombatTimer = 300;
@@ -2886,7 +3222,11 @@ function checkPhysicsAndHits() {
                 hitDmg *= 3.5;
               }
               A.damage += 0.5;
-            } else if (A.name === "Brawler") A.damage += 1.0;
+            } else if (A.name === "Brawler" && !A.isUltActive) {
+              // Brawler tidak boleh menambah damage selama Gravity Orbit aktif.
+              // Stack baru kembali berjalan setelah ult selesai.
+              A.damage += 1.0;
+            }
             let finalDmg = B.takeDamage(hitDmg, A);
             B.iFrames = A.isUltActive ? 12 : 30;
             if (A.name === "Divergent") {
@@ -2909,7 +3249,11 @@ function checkPhysicsAndHits() {
                 hitDmg *= 5;
               }
               B.damage += 0.5;
-            } else if (B.name === "Brawler") B.damage += 1.0;
+            } else if (B.name === "Brawler" && !B.isUltActive) {
+              // Brawler tidak boleh menambah damage selama Gravity Orbit aktif.
+              // Stack baru kembali berjalan setelah ult selesai.
+              B.damage += 1.0;
+            }
             let finalDmg = A.takeDamage(hitDmg, B);
             A.iFrames = B.isUltActive ? 12 : 30;
             if (B.name === "Divergent") {
@@ -3028,6 +3372,12 @@ function getCharSpecificStats(p) {
       lines.push(`Getsuga: ${p.bloodchainGJCD > 0 ? (p.bloodchainGJCD / 60).toFixed(1) + "s" : "READY"}`);
       lines.push(`Form: ${p.bloodchainBankai ? "BANKAI" : p.bloodchainTransformTimer > 0 ? "TRANSFORMING" : "TRUE SHIKAI"}`);
       break;
+    case "Tyrant":
+      lines.push(`Sword Dmg: ${p.damage.toFixed(1)}`);
+      lines.push(`Atk Spd: ${p.atkSpeed.toFixed(2)}x`);
+      lines.push(`Portals: ${(p.tyrantPortalSlots ? p.tyrantPortalSlots.size : 0)}/36`);
+      lines.push(`Ult Hits: +50 per hit`);
+      break;
     case "Valkyrie":
       lines.push(`Sword Dmg: ${p.damage.toFixed(1)}`);
       if (p.isUltActive) lines.push(`Valhalla Regen: ACTIVE`);
@@ -3116,6 +3466,17 @@ function gameLoop() {
     if (scatteredSwords[i].life <= 0) scatteredSwords.splice(i, 1);
   }
 
+  for (let i = tyrantPortals.length - 1; i >= 0; i--) {
+    if (gameState === "playing") tyrantPortals[i].update();
+    tyrantPortals[i].draw();
+    if (tyrantPortals[i].life <= 0) tyrantPortals.splice(i, 1);
+  }
+  for (let i = tyrantSwords.length - 1; i >= 0; i--) {
+    if (gameState === "playing") tyrantSwords[i].update();
+    tyrantSwords[i].draw();
+    if (tyrantSwords[i].life <= 0) tyrantSwords.splice(i, 1);
+  }
+
   for (let i = soundTraps.length - 1; i >= 0; i--) {
     if (gameState === "playing") soundTraps[i].update();
     soundTraps[i].draw();
@@ -3166,7 +3527,44 @@ function gameLoop() {
 
   for (let i = effects.length - 1; i >= 0; i--) {
     let ef = effects[i];
-    if (ef.type === "unlimited_void_dot") {
+    if (ef.type === "tyrant_sword_hit") {
+      ctx.save(); const progress=1-ef.life/ef.maxLife; ctx.beginPath(); ctx.arc(ef.x,ef.y,10+progress*30,0,Math.PI*2);
+      ctx.strokeStyle=`rgba(164,200,225,${1-progress})`; ctx.lineWidth=3; ctx.shadowColor="#a4c8e1"; ctx.shadowBlur=10; ctx.stroke(); ctx.restore(); ef.life--;
+    } else if (ef.type === "tyrant_chains") {
+      const target=ef.target;
+      if(!target||target.hp<=0){ef.life=0;} else {
+        const progress=1-ef.life/ef.maxLife;
+        const chainColor = ef.color || "#a4c8e1";
+        const chainLinkColor = ef.color ? "rgba(255,210,235,0.95)" : "rgba(220,240,255,0.9)";
+        const corners=[{x:0,y:0},{x:canvas.width,y:0},{x:canvas.width,y:canvas.height},{x:0,y:canvas.height}];
+        ctx.save(); ctx.lineCap="round";
+        corners.forEach((c)=>{
+          const dx=target.x-c.x,dy=target.y-c.y,len=Math.hypot(dx,dy)||1,reach=Math.min(1,progress*4);
+          ctx.strokeStyle = ef.color ? `rgba(255,118,206,${0.4+0.6*Math.min(1,progress*3)})` : `rgba(164,200,225,${0.4+0.6*Math.min(1,progress*3)})`; ctx.shadowColor=chainColor; ctx.shadowBlur=12; ctx.lineWidth=7;
+          ctx.beginPath(); ctx.moveTo(c.x,c.y); ctx.lineTo(c.x+dx*reach,c.y+dy*reach); ctx.stroke();
+          const links=Math.max(1,Math.floor(len*reach/34));
+          for(let k=1;k<=links;k++){
+            const t=k/(links+1),lx=c.x+dx*t*reach,ly=c.y+dy*t*reach;
+            ctx.save(); ctx.translate(lx,ly); ctx.rotate(Math.atan2(dy,dx)+(k%2?0.25:-0.25)); ctx.strokeStyle=chainLinkColor; ctx.lineWidth=3;
+            ctx.beginPath(); ctx.ellipse(0,0,9,4,0,0,Math.PI*2); ctx.stroke(); ctx.restore();
+          }
+        });
+        ctx.beginPath(); ctx.arc(target.x,target.y,target.radius+12+Math.sin(Date.now()*0.012)*3,0,Math.PI*2); ctx.strokeStyle=ef.color ? "rgba(255,118,206,0.95)" : "rgba(164,200,225,0.95)"; ctx.lineWidth=2; ctx.stroke();
+        ctx.restore(); ef.life--;
+      }
+    } else if (ef.type === "copycat_tensho_hit") {
+      const progress = 1 - ef.life / ef.maxLife;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(ef.x, ef.y, 14 + progress * 38, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255,118,206,${1 - progress})`;
+      ctx.lineWidth = 4;
+      ctx.shadowColor = ef.color || "#FF76CE";
+      ctx.shadowBlur = 14;
+      ctx.stroke();
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "unlimited_void_dot") {
       if (ef.target && ef.target.hp > 0) {
         if (ef.life % 20 === 0) {
           let dmg = ef.target.takeDamage(0.6, ef.owner);
@@ -3386,12 +3784,21 @@ function showWinnerOverlay(winnerName) {
 function resetToMenu() {
   document.getElementById("winner-overlay").style.display = "none";
   document.getElementById("game-container").style.display = "none";
-  document.getElementById("selection-screen").style.display = "flex";
+  document.getElementById("map-screen").style.display = "none";
+
+  // Let responsive CSS choose the correct selection layout.
+  const selectionScreen = document.getElementById("selection-screen");
+  selectionScreen.style.display = "";
+  document.querySelectorAll("#p1-roster, #p2-roster").forEach((roster) => {
+    roster.scrollTop = 0;
+  });
   projectiles = [];
   bloodchainSkills = [];
   infinitySkills = [];
   soundTraps = [];
   scatteredSwords = [];
+  tyrantPortals = [];
+  tyrantSwords = [];
   killerQueenSkills = [];
   gameState = "menu";
 }
@@ -3491,6 +3898,8 @@ function setupGame() {
   infinitySkills = [];
   soundTraps = [];
   scatteredSwords = [];
+  tyrantPortals = [];
+  tyrantSwords = [];
   killerQueenSkills = [];
   balls.push(new Ball(1, p1Choice, canvas.width * 0.25, canvas.height / 2));
   balls.push(new Ball(2, p2Choice, canvas.width * 0.75, canvas.height / 2));
