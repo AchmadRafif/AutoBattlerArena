@@ -936,6 +936,44 @@
         }
       }
 
+      /* ================= CHARACTER SCROLL FIX ================= */
+      @media (max-width: 768px) {
+        #selection-screen {
+          grid-template-rows: minmax(0, 1fr) !important;
+        }
+
+        #p1-panel,
+        #p2-panel {
+          min-height: 0 !important;
+          height: calc(100dvh - 12px) !important;
+          overflow: hidden !important;
+          box-sizing: border-box !important;
+        }
+
+        #p1-panel .roster-grid,
+        #p2-panel .roster-grid {
+          display: grid !important;
+          flex: 1 1 0 !important;
+          height: 0 !important;
+          min-height: 0 !important;
+          max-height: none !important;
+          overflow-y: scroll !important;
+          overflow-x: hidden !important;
+          overscroll-behavior: contain !important;
+          -webkit-overflow-scrolling: touch !important;
+          touch-action: pan-y !important;
+          scrollbar-width: none !important;
+          -ms-overflow-style: none !important;
+        }
+
+        #p1-panel .roster-grid::-webkit-scrollbar,
+        #p2-panel .roster-grid::-webkit-scrollbar {
+          display: none !important;
+          width: 0 !important;
+          height: 0 !important;
+        }
+      }
+
       /* ================= MINIMAL MOBILE SCROLL ================= */
       @media (max-width: 768px) {
         html,
