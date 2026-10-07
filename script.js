@@ -257,6 +257,20 @@ const characterDB = {
     desc: "Six Eyes, Mugen, Hollow Purple",
     ultMax: 2500,
   },
+  "Funeral": {
+    color: "#8f1725",
+    hp: 100,
+    damage: 2.0,
+    speed: 2.7,
+    weapons: 1,
+    wLen: 76,
+    wWidth: 11,
+    rotSpeed: 0.028,
+    ultName: "PARAMITA PAPILIO",
+    ultColor: "#8f1725",
+    desc: "Wangsheng Funeral Parlor",
+    ultMax: 900,
+  },
 };
 
 /* ================= KONFIGURASI MAP DENGAN TEMA UI DINAMIS ================= */
@@ -1566,7 +1580,31 @@ class Ball {
     this.bloodchainBankai = false;
     this.bloodchainImmune = false;
     this.bloodchainGJCD = 0;
+
+    // Funeral
+    this.hutaoHitCount = 0;
+    this.hutaoBloodBlossom = null;
+    this.funeralBurn = null;
+    this.hutaoUltTimer = 0;
+    this.funeralUltPhase = "ready"; // ready, eCharge, eActive, burstCharge
+    this.funeralUltCooldown = 900;
+    this.funeralUltCooldownMax = 900;
+    this.funeralUltMax = 900;
+    this.funeralEBonusDamage = 0;
+    this.funeralPermanentBonusDamage = 0;
+    this.funeralEActive = false;
+    this.funeralPapilioDuration = 700;
+    this.funeralChargeAttackCD = 0;
+    this.funeralChargeAttackTimer = 0;
+    this.funeralChargeAttackStartX = this.x;
+    this.funeralChargeAttackStartY = this.y;
+    this.funeralChargeAttackEndX = this.x;
+    this.funeralChargeAttackEndY = this.y;
+    this.funeralChargeAttackTarget = null;
+    this.funeralChargeAttackHit = false;
+    this.funeralChargeAttackAngle = 0;
   }
+
 
   takeDamage(amount, attacker = null, isProjectile = false) {
     if (this.name === "Bloodchain" && this.bloodchainImmune) {
@@ -1575,6 +1613,10 @@ class Ball {
     }
     if (this.name === "Illustrade" && this.isUltActive) {
       spawnText("IMMUNE!", this.x, this.y - 12, "#222222");
+      return 0;
+    }
+    if (this.name === "Funeral" && this.funeralUltPhase === "burstCharge") {
+      spawnText("IMMUNE!", this.x, this.y - 12, "#8f1725");
       return 0;
     }
     if (this.name === "Infinity") {
@@ -1907,6 +1949,129 @@ class Ball {
       ctx.restore();
     }
 
+    if (this.name === "Funeral") {
+      ctx.save();
+      const now = Date.now();
+      const t = now * 0.0018;
+      const critical = this.hp < 25;
+      const papilio = this.funeralEActive;
+      const charging = this.funeralUltPhase === "eCharge" || this.funeralUltPhase === "burstCharge";
+      const primary = critical ? "#ff4d3d" : papilio ? "#c72d3a" : "#8f1725";
+      const secondary = critical ? "#ffb070" : "#e56c46";
+      const outerR = this.radius + (papilio ? 25 : 15) + Math.sin(now * 0.009) * 3;
+
+      // Infinity/Copycat-style layered aura: soft core, rotating rings, drifting embers.
+      ctx.globalCompositeOperation = "lighter";
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, outerR, 0, Math.PI * 2);
+      ctx.fillStyle = papilio ? "rgba(199,45,58,0.20)" : critical ? "rgba(255,77,61,0.18)" : "rgba(143,23,37,0.14)";
+      ctx.shadowColor = primary;
+      ctx.shadowBlur = papilio ? 28 : 18;
+      ctx.fill();
+
+      for (let ring = 0; ring < (papilio ? 3 : 2); ring++) {
+        const rr = this.radius + 12 + ring * 8 + Math.sin(t * 2.2 + ring) * 2;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, rr, t * (ring % 2 ? -0.55 : 0.45) + ring, t * (ring % 2 ? -0.55 : 0.45) + Math.PI * 1.35);
+        ctx.strokeStyle = ring === 0 ? `rgba(255,176,112,${papilio ? 0.78 : 0.48})` : `rgba(199,45,58,${papilio ? 0.74 : 0.36})`;
+        ctx.lineWidth = papilio ? 2.5 : 1.6;
+        ctx.shadowColor = secondary;
+        ctx.shadowBlur = 9;
+        ctx.stroke();
+      }
+
+      // Pyro butterflies / soul embers orbit around Funeral during Papilio.
+      const particleCount = papilio ? 12 : 8;
+      for (let i = 0; i < particleCount; i++) {
+        const a = t * (i % 2 ? 0.72 : -0.52) + (i * Math.PI * 2) / particleCount;
+        const rr = this.radius + 18 + Math.sin(t * 2.8 + i) * 5 + (papilio ? 7 : 0);
+        const px = this.x + Math.cos(a) * rr;
+        const py = this.y + Math.sin(a) * rr;
+        const s = papilio ? 1.0 : 0.72;
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(a + Math.PI / 2);
+        ctx.fillStyle = i % 2 ? secondary : primary;
+        ctx.shadowColor = ctx.fillStyle;
+        ctx.shadowBlur = papilio ? 10 : 6;
+        ctx.beginPath();
+        ctx.ellipse(-3 * s, 0, 3.4 * s, 6 * s, -0.35, 0, Math.PI * 2);
+        ctx.ellipse(3 * s, 0, 3.4 * s, 6 * s, 0.35, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#5b0a16";
+        ctx.beginPath(); ctx.arc(0, 1, 1.4 * s, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+
+      if (charging) {
+        const progress = Math.max(0, Math.min(1, 1 - this.funeralUltTimer / (this.hp < 25 ? 180 : 45)));
+        const rr = this.radius + 30 + progress * 20;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, rr, -Math.PI / 2, -Math.PI / 2 + Math.PI * (0.5 + progress * 1.65));
+        ctx.strokeStyle = "#ffd18f";
+        ctx.lineWidth = 3;
+        ctx.shadowColor = "#ff7043";
+        ctx.shadowBlur = 18;
+        ctx.stroke();
+      }
+
+      if (papilio) {
+        // Persistent infusion ring, intentionally prominent.
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius + 27 + Math.sin(t * 5) * 2, 0, Math.PI * 2);
+        ctx.strokeStyle = "rgba(255,111,77,0.55)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      ctx.globalCompositeOperation = "source-over";
+      ctx.restore();
+    }
+
+    if (this.funeralBurn && this.funeralBurn.owner && this.funeralBurn.owner.hp > 0) {
+      ctx.save();
+      const tBurn = Date.now() * 0.010;
+      ctx.globalAlpha = 0.82;
+      ctx.shadowColor = "#ff4d3d";
+      ctx.shadowBlur = 12;
+      for (let i = 0; i < 6; i++) {
+        const a = tBurn * (i % 2 ? 0.7 : -0.5) + i * Math.PI / 3;
+        const rr = this.radius + 7 + Math.sin(tBurn * 2 + i) * 2;
+        const fx = this.x + Math.cos(a) * rr;
+        const fy = this.y + Math.sin(a) * rr;
+        ctx.fillStyle = i % 2 ? "#ffb36b" : "#ff553f";
+        ctx.beginPath();
+        ctx.ellipse(fx, fy, 2.5, 6, a, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    if (this.hutaoBloodBlossom && this.hutaoBloodBlossom.owner && this.hutaoBloodBlossom.owner.hp > 0) {
+      ctx.save();
+      const flowerPulse = 1 + Math.sin(Date.now() * 0.012) * 0.12;
+      const fx = this.x;
+      const fy = this.y - this.radius - 15;
+      ctx.translate(fx, fy);
+      ctx.scale(flowerPulse, flowerPulse);
+      ctx.shadowColor = "#ff4b3e";
+      ctx.shadowBlur = 8;
+      for (let i = 0; i < 5; i++) {
+        const a = (i * Math.PI * 2) / 5;
+        ctx.save();
+        ctx.rotate(a);
+        ctx.fillStyle = "#c0392b";
+        ctx.beginPath();
+        ctx.ellipse(0, -7, 3.8, 6.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+      ctx.fillStyle = "#f7c26a";
+      ctx.beginPath();
+      ctx.arc(0, 0, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
     if (this.name === "Illustrade" && this.isUltActive) {
       ctx.save();
       ctx.translate(this.x, this.y);
@@ -2052,6 +2217,85 @@ class Ball {
           ctx.restore();
           return;
         }
+        if (this.name === "Funeral") {
+          const dx = seg.p2.x - seg.p1.x, dy = seg.p2.y - seg.p1.y;
+          const len = Math.hypot(dx, dy) || 1;
+          const ux = dx / len, uy = dy / len;
+          const px = -uy, py = ux;
+          const critical = this.hp < 25;
+          const charging = this.funeralUltPhase === "eCharge" || this.funeralUltPhase === "burstCharge";
+          const glow = critical || charging ? "#ff5a48" : this.funeralEActive ? "#ff7b55" : "#8f1725";
+          const shaftEndX = seg.p2.x - ux * 22, shaftEndY = seg.p2.y - uy * 22;
+          const collarX = seg.p2.x - ux * 23, collarY = seg.p2.y - uy * 23;
+          const bladeBaseX = seg.p2.x - ux * 18, bladeBaseY = seg.p2.y - uy * 18;
+          const bladeShoulderX = seg.p2.x - ux * 8, bladeShoulderY = seg.p2.y - uy * 8;
+          const tipX = seg.p2.x + ux * 17, tipY = seg.p2.y + uy * 17;
+          ctx.save();
+          ctx.lineCap = "round";
+          ctx.shadowColor = glow;
+          ctx.shadowBlur = this.funeralEActive ? 18 : charging ? 14 : 8;
+
+          // Homa shaft: black wine-red outline, crimson core, thin hot-red highlight.
+          ctx.strokeStyle = "#25040a"; ctx.lineWidth = 11;
+          ctx.beginPath(); ctx.moveTo(seg.p1.x, seg.p1.y); ctx.lineTo(shaftEndX, shaftEndY); ctx.stroke();
+          ctx.strokeStyle = "#67101c"; ctx.lineWidth = 7;
+          ctx.beginPath(); ctx.moveTo(seg.p1.x, seg.p1.y); ctx.lineTo(shaftEndX, shaftEndY); ctx.stroke();
+          ctx.strokeStyle = "#bd2b3c"; ctx.lineWidth = 2.4;
+          ctx.beginPath(); ctx.moveTo(seg.p1.x, seg.p1.y); ctx.lineTo(shaftEndX, shaftEndY); ctx.stroke();
+
+          // Gold Homa collar / ornate guard.
+          ctx.strokeStyle = "#b98024"; ctx.lineWidth = 6;
+          ctx.beginPath(); ctx.moveTo(collarX - px * 8, collarY - py * 8); ctx.lineTo(collarX + px * 8, collarY + py * 8); ctx.stroke();
+          ctx.strokeStyle = "#ffe39a"; ctx.lineWidth = 1.8;
+          ctx.beginPath(); ctx.moveTo(collarX - px * 8, collarY - py * 8); ctx.lineTo(collarX + px * 8, collarY + py * 8); ctx.stroke();
+
+          // Gold side ornaments beneath the spearhead.
+          for (const side of [-1, 1]) {
+            ctx.fillStyle = "#d7a64a";
+            ctx.beginPath();
+            ctx.moveTo(collarX + ux * 1 + px * side * 2, collarY + uy * 1 + py * side * 2);
+            ctx.lineTo(collarX + ux * 9 + px * side * 9, collarY + uy * 9 + py * side * 9);
+            ctx.lineTo(collarX + ux * 15 + px * side * 4, collarY + uy * 15 + py * side * 4);
+            ctx.lineTo(collarX + ux * 7 + px * side * 1, collarY + uy * 7 + py * side * 1);
+            ctx.closePath(); ctx.fill();
+          }
+
+          // Broad crescent/flame spearhead, closer to Staff of Homa's recognizable head shape.
+          const baseHalf = 8.5, shoulderHalf = 15, midHalf = 12;
+          const C = (d) => ({ x: seg.p2.x - ux * d, y: seg.p2.y - uy * d });
+          const b = C(18), sh = C(11), m = C(3), tip = { x: tipX, y: tipY };
+          ctx.fillStyle = critical || charging ? "#e23a43" : "#b31f2f";
+          ctx.beginPath();
+          ctx.moveTo(tip.x, tip.y);
+          ctx.quadraticCurveTo(sh.x + px * shoulderHalf, sh.y + py * shoulderHalf, b.x + px * baseHalf, b.y + py * baseHalf);
+          ctx.quadraticCurveTo(m.x + px * midHalf, m.y + py * midHalf, m.x + px * 3, m.y + py * 3);
+          ctx.quadraticCurveTo(m.x + ux * 4, m.y + uy * 4, tip.x, tip.y);
+          ctx.closePath(); ctx.fill();
+          ctx.strokeStyle = "#3f0710"; ctx.lineWidth = 2.2; ctx.stroke();
+
+          // Hollow inner groove and hot-gold edge.
+          ctx.strokeStyle = "#f2bf62"; ctx.lineWidth = 2.4;
+          ctx.beginPath();
+          ctx.moveTo(b.x + ux * 2, b.y + uy * 2);
+          ctx.quadraticCurveTo(m.x + px * 3, m.y + py * 3, tip.x - ux * 3, tip.y - uy * 3);
+          ctx.stroke();
+          ctx.strokeStyle = "#fff0b5"; ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(b.x - ux * 1, b.y - uy * 1);
+          ctx.quadraticCurveTo(m.x - px * 5, m.y - py * 5, tip.x - ux * 7, tip.y - uy * 7);
+          ctx.stroke();
+
+          if (critical || this.funeralEActive) {
+            ctx.strokeStyle = "#ff765d"; ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(tip.x - ux * 5, tip.y - uy * 5);
+            ctx.lineTo(tip.x + ux * 4, tip.y + uy * 4);
+            ctx.stroke();
+          }
+          ctx.restore();
+          return;
+        }
+
         ctx.beginPath();
         ctx.moveTo(seg.p1.x, seg.p1.y);
         ctx.lineTo(seg.p2.x, seg.p2.y);
@@ -2124,6 +2368,184 @@ class Ball {
         this.hp = 0;
         this.visible = false;
         return;
+      }
+    }
+
+    // Funeral: low-HP scaling, Blood Blossom, charge attacks, and cooldown-based ultimates.
+    if (this.name === "Funeral") {
+      if (!this.isClone) {
+        // The cooldown length is locked when an ultimate cycle begins.
+        // Damage dealt/received does not reduce the cooldown.
+        // When ready for the next cycle, the HP threshold determines which
+        // ultimate is selected: Papilio at HP >= 25, Spirit Soother below 25.
+        if (this.funeralUltPhase === "ready" && this.funeralUltCooldown <= 0) {
+          this.funeralUltMax = this.hp < 25 ? 1300 : 900;
+          this.funeralUltCooldownMax = this.funeralUltMax;
+        }
+        if (this.funeralUltCooldown > 0) {
+          this.funeralUltCooldown--;
+        }
+        this.ultMax = this.funeralUltCooldownMax;
+        this.ultCharge = Math.max(0, this.funeralUltCooldownMax - this.funeralUltCooldown);
+
+        let passiveDamage = characterDB["Funeral"].damage;
+        if (this.hp < 25) passiveDamage *= 1.55;
+        else if (this.hp <= 50) passiveDamage *= 1.30;
+        this.damage = passiveDamage + this.funeralPermanentBonusDamage;
+
+        if (this.funeralUltPhase === "ready" && this.funeralUltCooldown <= 0 && gameState === "playing") {
+          this.activateUlt();
+        }
+      }
+
+      if (this.hutaoBloodBlossom) {
+        const mark = this.hutaoBloodBlossom;
+        if (!mark.owner || mark.owner.hp <= 0) this.hutaoBloodBlossom = null;
+        else {
+          mark.life--; mark.tickTimer--;
+          if (mark.tickTimer <= 0) {
+            const bloomDamage = this.takeDamage(0.65, mark.owner);
+            if (bloomDamage > 0) spawnText("BLOOD BLOSSOM -" + bloomDamage.toFixed(1), this.x, this.y - 28, "#c0392b");
+            mark.tickTimer = 45;
+          }
+          if (mark.life <= 0 || this.hp <= 0) this.hutaoBloodBlossom = null;
+        }
+      }
+
+      // Hu Tao-like charged attack: available in and out of Paramita Papilio.
+      if (this.funeralChargeAttackCD > 0) this.funeralChargeAttackCD--;
+      if (this.funeralChargeAttackTimer > 0) {
+        const total = 16;
+        const progress = 1 - this.funeralChargeAttackTimer / total;
+        this.x = this.funeralChargeAttackStartX +
+          (this.funeralChargeAttackEndX - this.funeralChargeAttackStartX) * progress;
+        this.y = this.funeralChargeAttackStartY +
+          (this.funeralChargeAttackEndY - this.funeralChargeAttackStartY) * progress;
+        this.angle = this.funeralChargeAttackAngle;
+        this.vx = 0; this.vy = 0;
+
+        // The charge attack has a continuous hit check, so Funeral actually travels
+        // through the enemy instead of only checking the destination point.
+        if (this.funeralChargeAttackTarget && this.funeralChargeAttackTarget.hp > 0 && !this.funeralChargeAttackHit) {
+          const target = this.funeralChargeAttackTarget;
+          const dist = Math.hypot(target.x - this.x, target.y - this.y);
+          if (dist < target.radius + 32) {
+            const chargeDamage = this.damage;
+            const dealt = target.takeDamage(chargeDamage, this);
+            const kbDx = target.x - this.x, kbDy = target.y - this.y;
+            const kbDist = Math.hypot(kbDx, kbDy) || 1;
+            target.vx = (kbDx / kbDist) * (this.funeralEActive ? 15 : 12);
+            target.vy = (kbDy / kbDist) * (this.funeralEActive ? 15 : 12);
+            target.knockbackTimer = 34;
+            this.funeralChargeAttackHit = true;
+            if (dealt > 0) {
+              applyFuneralBloodBlossom(this, target, true);
+              applyFuneralBurn(this, target);
+            }
+            spawnText("CHARGE ATTACK -" + dealt.toFixed(1), target.x, target.y - 24, "#ff7043");
+            effects.push({
+              type: "funeral_charge_hit",
+              x: target.x, y: target.y, life: 34, maxLife: 34,
+              angle: this.funeralChargeAttackAngle,
+            });
+          }
+        }
+
+        this.funeralChargeAttackTimer--;
+        if (this.funeralChargeAttackTimer <= 0) {
+          this.funeralChargeAttackHit = false;
+          this.funeralChargeAttackTarget = null;
+        }
+      }
+
+      if (
+        this.funeralChargeAttackTimer <= 0 &&
+        this.funeralChargeAttackCD <= 0 &&
+        gameState === "playing" &&
+        !this.isClone &&
+        this.funeralUltPhase !== "eCharge" &&
+        this.funeralUltPhase !== "burstCharge"
+      ) {
+        const enemy = balls.find((b) => b.team !== this.team && b.hp > 0 && !b.isClone)
+          || balls.find((b) => b.team !== this.team && b.hp > 0);
+        if (enemy) performFuneralChargeAttack.call(this, enemy);
+      }
+
+      if (this.funeralUltPhase === "eCharge") {
+        this.funeralUltTimer--; this.vx = 0; this.vy = 0;
+        if (this.funeralUltTimer <= 0) {
+          const currentDamage = this.damage;
+          const healthBefore = this.hp;
+          this.hp = Math.max(1, this.hp * 0.75);
+          // Papilio's damage bonus is permanent. Each successful activation adds
+          // 40% of the current damage as a new permanent layer.
+          const permanentGain = currentDamage * 0.40;
+          this.funeralPermanentBonusDamage += permanentGain;
+          this.funeralEBonusDamage = permanentGain;
+          this.funeralEActive = true;
+          this.funeralUltPhase = "eActive";
+          this.funeralUltTimer = this.funeralPapilioDuration;
+          this.damage = currentDamage + permanentGain;
+          spawnText("-" + (healthBefore - this.hp).toFixed(1) + " HP", this.x, this.y - 28, "#ff7043");
+          spawnText("+40% PERMANENT DMG", this.x, this.y - 46, "#ffb36b");
+          performFuneralPapilio.call(this);
+        }
+      } else if (this.funeralUltPhase === "eActive") {
+        this.funeralUltTimer--;
+        if (this.funeralUltTimer <= 0) {
+          this.funeralEActive = false;
+          this.funeralEBonusDamage = 0;
+          this.funeralUltPhase = "ready";
+          this.isUltActive = false;
+          this.bonusText = "";
+          const ang = Math.random() * Math.PI * 2;
+          this.vx = Math.cos(ang) * this.baseSpeed;
+          this.vy = Math.sin(ang) * this.baseSpeed;
+        }
+      } else if (this.funeralUltPhase === "burstCharge") {
+        this.funeralUltTimer--; this.vx = 0; this.vy = 0;
+        this.stunTimer = 0; this.knockbackTimer = 0; this.domainDebuffTimer = 0;
+        if (this.funeralUltTimer <= 0) performFuneralBurst.call(this);
+      } else if (this.funeralUltPhase === "burstActive") {
+        // Lock Funeral in place for the entire Spirit Soother animation.
+        this.funeralUltTimer--;
+        this.vx = 0;
+        this.vy = 0;
+        this.stunTimer = 0;
+        this.knockbackTimer = 0;
+        this.domainDebuffTimer = 0;
+        if (this.funeralUltTimer <= 0) {
+          this.funeralUltPhase = "ready";
+          this.isUltActive = false;
+          this.bonusText = "";
+          const ang = Math.random() * Math.PI * 2;
+          this.vx = Math.cos(ang) * this.baseSpeed;
+          this.vy = Math.sin(ang) * this.baseSpeed;
+        }
+      }
+    }
+
+    // Funeral's Pyro burn belongs to the target, so it must tick for any Ball.
+    if (this.funeralBurn) {
+      const burn = this.funeralBurn;
+      if (!burn.owner || burn.owner.hp <= 0 || this.hp <= 0) {
+        this.funeralBurn = null;
+      } else {
+        burn.life--;
+        burn.tickTimer--;
+        if (burn.tickTimer <= 0 && burn.ticksLeft > 0) {
+          const burnDamage = this.takeDamage(burn.owner.damage * 0.15, burn.owner);
+          if (burnDamage > 0) {
+            spawnText("BURN -" + burnDamage.toFixed(1), this.x, this.y - 30, "#ff7043");
+            effects.push({
+              type: "funeral_burn_tick",
+              x: this.x, y: this.y, life: 18, maxLife: 18,
+            });
+          }
+          burn.ticksLeft--;
+          burn.tickTimer = 20;
+        }
+        if (burn.life <= 0 || burn.ticksLeft <= 0 || this.hp <= 0) this.funeralBurn = null;
       }
     }
 
@@ -2739,7 +3161,7 @@ class Ball {
       this.activateUlt();
     }
 
-    if (gameState === "playing" && !this.isClone && !this.isUltActive && this.name !== "Death Note" && this.name !== "Divergent" && (this.name !== "Bloodchain" || !this.bloodchainBankai)) {
+    if (gameState === "playing" && !this.isClone && !this.isUltActive && this.name !== "Death Note" && this.name !== "Divergent" && this.name !== "Funeral" && (this.name !== "Bloodchain" || !this.bloodchainBankai)) {
       this.ultCharge = Math.min(this.ultMax, this.ultCharge + 1);
       if (this.ultCharge >= this.ultMax) this.activateUlt();
     }
@@ -2868,8 +3290,26 @@ class Ball {
       this.bonusText = "3X ATK SPEED TIME STOP!";
       this.stasisUltTimer = 210;
     } else if (this.name === "Valkyrie") this.bonusText = "REGEN!";
+    else if (this.name === "Funeral") {
+      const critical = this.hp < 25;
+      this.funeralUltMax = critical ? 1300 : 900;
+      this.funeralUltCooldownMax = this.funeralUltMax;
+      this.ultMax = this.funeralUltCooldownMax;
+      this.funeralUltCooldown = this.funeralUltCooldownMax;
+      this.ultCharge = 0;
+      this.vx = 0;
+      this.vy = 0;
+      this.isUltActive = true;
+      if (critical) {
+        this.funeralUltPhase = "burstCharge";
+        this.funeralUltTimer = 180;
+      } else {
+        this.funeralUltPhase = "eCharge";
+        this.funeralUltTimer = 45;
+      }
+    }
 
-    if (this.name !== "Sword Saint" && this.name !== "Stasis" && this.name !== "Illustrade" && this.name !== "Infinity" && this.name !== "Echoes") {
+    if (this.name !== "Sword Saint" && this.name !== "Stasis" && this.name !== "Illustrade" && this.name !== "Infinity" && this.name !== "Echoes" && this.name !== "Funeral") {
       let ultDuration = this.name === "Brawler" ? 1000 : this.name === "Antimagic" ? 2000 : 5000;
       setTimeout(() => {
         this.isUltActive = false;
@@ -2890,6 +3330,178 @@ class Ball {
       }, ultDuration);
     }
   }
+}
+
+function performFuneralPapilio() {
+  if (this.name !== "Funeral" || this.hp <= 0) return;
+  effects.push({
+    type: "funeral_papilio_transform",
+    x: this.x, y: this.y,
+    life: 72, maxLife: 72,
+    angle: this.angle,
+  });
+  effects.push({
+    type: "funeral_papilio_burst",
+    x: this.x, y: this.y,
+    life: 38, maxLife: 38,
+  });
+}
+
+function performFuneralChargeAttack(target) {
+  if (this.name !== "Funeral" || !target || target.hp <= 0 || this.funeralChargeAttackCD > 0) return;
+  const dx = target.x - this.x;
+  const dy = target.y - this.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  const angle = Math.atan2(dy, dx);
+
+  // Longer Hu Tao-style dash. The target is slightly overshot when possible so
+  // Funeral visibly passes through the opponent instead of stopping short.
+  const dashDistance = Math.min(235, Math.max(95, dist + target.radius + 34));
+  this.funeralChargeAttackAngle = angle;
+  this.angle = angle;
+  this.funeralChargeAttackStartX = this.x;
+  this.funeralChargeAttackStartY = this.y;
+  this.funeralChargeAttackEndX = Math.max(this.radius, Math.min(canvas.width - this.radius, this.x + Math.cos(angle) * dashDistance));
+  this.funeralChargeAttackEndY = Math.max(this.radius, Math.min(canvas.height - this.radius, this.y + Math.sin(angle) * dashDistance));
+  this.funeralChargeAttackTarget = target;
+  this.funeralChargeAttackTimer = 16;
+  this.funeralChargeAttackCD = 300;
+  this.funeralChargeAttackHit = false;
+  this.vx = 0;
+  this.vy = 0;
+  effects.push({
+    type: "funeral_charge",
+    x: this.x, y: this.y,
+    startX: this.x, startY: this.y,
+    endX: this.funeralChargeAttackEndX, endY: this.funeralChargeAttackEndY,
+    angle, papilio: this.funeralEActive,
+    life: 24, maxLife: 24,
+  });
+}
+
+function performFuneralBurst() {
+  if (this.name !== "Funeral" || this.hp <= 0) return;
+
+  const enemy = balls.find((b) => b.team !== this.team && b.hp > 0 && !b.isClone)
+    || balls.find((b) => b.team !== this.team && b.hp > 0);
+  const currentDamage = this.damage;
+  const oldX = this.x;
+  const oldY = this.y;
+  const healAmount = this.maxHp * 0.40;
+  const hpBefore = this.hp;
+
+  // Keep Funeral stationary until the Spirit Soother visual finishes.
+  this.funeralUltPhase = "burstActive";
+  this.isUltActive = true;
+  this.funeralEBonusDamage = 0;
+  this.funeralEActive = false;
+  this.ultCharge = 0;
+  this.funeralUltTimer = 78;
+
+  // Add +40% Max HP to current HP rather than setting HP to a percentage.
+  this.hp = Math.min(this.maxHp, this.hp + healAmount);
+  spawnText("+" + (this.hp - hpBefore).toFixed(1) + " HP", this.x, this.y - 28, "#ffb36b");
+
+  let angle = this.angle;
+  let hitEnemy = null;
+  let burstDamage = 0;
+  let blossomExplosion = 0;
+
+  if (enemy) {
+    const dx = enemy.x - this.x;
+    const dy = enemy.y - this.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    angle = Math.atan2(dy, dx);
+    this.angle = angle;
+
+    // Spirit Soother is a short-mid-range sweeping ghost slash, not a projectile.
+    const reach = 235;
+    const halfArc = 1.22;
+    let diff = angle - this.angle;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+
+    if (dist <= reach) {
+      hitEnemy = enemy;
+      const burstDmg = currentDamage * 5.0;
+      burstDamage = enemy.takeDamage(burstDmg, this);
+
+      if (enemy.hp > 0 && enemy.hutaoBloodBlossom && enemy.hutaoBloodBlossom.owner === this) {
+        blossomExplosion = enemy.takeDamage(6.0, this);
+        enemy.hutaoBloodBlossom = null;
+        this.hutaoHitCount = 0;
+        effects.push({ type: "hutao_blossom_burst", x: enemy.x, y: enemy.y, life: 44, maxLife: 44 });
+        spawnText("BLOOD BLOSSOM! -" + blossomExplosion.toFixed(1), enemy.x, enemy.y - 28, "#c0392b");
+      }
+
+      // Strong lateral shove in the same direction as the spirit sweep.
+      enemy.vx = Math.cos(angle) * 18;
+      enemy.vy = Math.sin(angle) * 18;
+      enemy.knockbackTimer = 55;
+      enemy.stunTimer = Math.max(enemy.stunTimer, 14);
+      spawnText("SPIRIT SOOTHER -" + (burstDamage + blossomExplosion).toFixed(1), enemy.x, enemy.y - 45, "#ff7043");
+    }
+  }
+
+  effects.push({
+    type: "funeral_spirit_soother",
+    x: oldX, y: oldY,
+    angle,
+    reach: 270,
+    hitTarget: hitEnemy,
+    impactX: hitEnemy ? hitEnemy.x : oldX + Math.cos(angle) * 180,
+    impactY: hitEnemy ? hitEnemy.y : oldY + Math.sin(angle) * 180,
+    life: 78, maxLife: 78,
+  });
+
+  // Movement is resumed by the burstActive state after the 360-degree animation ends.
+}
+
+function applyFuneralBloodBlossom(attacker, target, force = false) {
+  if (!attacker || attacker.name !== "Funeral" || attacker.isClone || !target || target.hp <= 0) return;
+
+  if (force) {
+    attacker.hutaoHitCount = 0;
+  } else {
+    attacker.hutaoHitCount = (attacker.hutaoHitCount || 0) + 1;
+    if (attacker.hutaoHitCount < 4) return;
+    attacker.hutaoHitCount = 0;
+  }
+  if (force || attacker.hutaoHitCount === 0) {
+    target.hutaoBloodBlossom = {
+      owner: attacker,
+      life: 240,
+      tickTimer: 45,
+    };
+    spawnText("BLOOD BLOSSOM!", target.x, target.y - 30, "#c0392b");
+    effects.push({
+      type: "hutao_blossom_mark",
+      x: target.x,
+      y: target.y,
+      life: 18,
+      maxLife: 18,
+    });
+  }
+}
+
+function applyFuneralBurn(attacker, target) {
+  if (!attacker || attacker.name !== "Funeral" || !attacker.funeralEActive) return;
+  if (!target || target.hp <= 0 || target === attacker) return;
+
+  // Papilio-infused attacks apply a short Pyro burn. Reapplying refreshes it.
+  target.funeralBurn = {
+    owner: attacker,
+    life: 120,
+    tickTimer: 20,
+    ticksLeft: 6,
+  };
+  effects.push({
+    type: "funeral_burn_apply",
+    x: target.x,
+    y: target.y,
+    life: 20,
+    maxLife: 20,
+  });
 }
 
 function spawnText(text, x, y, color) {
@@ -3056,6 +3668,10 @@ function checkPhysicsAndHits() {
               A.rotSpeed *= -1;
               let finalDmg = B.takeDamage(A.damage, A);
               B.iFrames = 60;
+              if (A.name === "Funeral" && finalDmg > 0) {
+                applyFuneralBloodBlossom(A, B);
+                applyFuneralBurn(A, B);
+              }
               if (A.name === "Tyrant") {
                 openRandomTyrantPortal(A);
                 tyrantRegisterHit(A, B, finalDmg, false);
@@ -3116,6 +3732,10 @@ function checkPhysicsAndHits() {
               B.rotSpeed *= -1;
               let finalDmg = A.takeDamage(B.damage, B);
               A.iFrames = 60;
+              if (B.name === "Funeral" && finalDmg > 0) {
+                applyFuneralBloodBlossom(B, A);
+                applyFuneralBurn(B, A);
+              }
               if (B.name === "Tyrant") {
                 openRandomTyrantPortal(B);
                 tyrantRegisterHit(B, A, finalDmg, false);
@@ -3382,6 +4002,12 @@ function getCharSpecificStats(p) {
       lines.push(`Sword Dmg: ${p.damage.toFixed(1)}`);
       if (p.isUltActive) lines.push(`Valhalla Regen: ACTIVE`);
       break;
+    case "Funeral":
+      lines.push(`Homa Dmg: ${p.damage.toFixed(1)}`);
+      lines.push(`Permanent Papilio: +${p.funeralPermanentBonusDamage.toFixed(2)} DMG`);
+      lines.push(`Paramita: ${p.hp < 25 ? "CRITICAL" : p.hp <= 50 ? "ACTIVE" : "NORMAL"}`);
+      lines.push(`Charge Attack: ${p.funeralChargeAttackCD > 0 ? (p.funeralChargeAttackCD / 60).toFixed(1) + "s" : "READY"}`);
+      break;
     default:
       lines.push(`Dmg: ${p.damage.toFixed(2)}`);
   }
@@ -3394,11 +4020,19 @@ function updateUI() {
   let p1 = balls.find((b) => b.team === 1 && !b.isClone),
     p2 = balls.find((b) => b.team === 2 && !b.isClone);
   if (p1) {
-    document.getElementById("barFill1").style.width = (p1.ultCharge / p1.ultMax) * 100 + "%";
+    const p1Pct = p1.name === "Funeral"
+      ? (1 - p1.funeralUltCooldown / Math.max(1, p1.funeralUltCooldownMax || p1.funeralUltMax)) * 100
+      : (p1.ultCharge / p1.ultMax) * 100;
+    document.getElementById("barFill1").style.width = Math.max(0, Math.min(100, p1Pct)) + "%";
+    document.getElementById("ultName1").innerText = p1.name === "Funeral" ? (p1.hp < 25 ? "SPIRIT SOOTHER" : "PARAMITA PAPILIO") : characterDB[p1.name].ultName;
     document.getElementById("stats1").innerHTML = getCharSpecificStats(p1);
   }
   if (p2) {
-    document.getElementById("barFill2").style.width = (p2.ultCharge / p2.ultMax) * 100 + "%";
+    const p2Pct = p2.name === "Funeral"
+      ? (1 - p2.funeralUltCooldown / Math.max(1, p2.funeralUltCooldownMax || p2.funeralUltMax)) * 100
+      : (p2.ultCharge / p2.ultMax) * 100;
+    document.getElementById("barFill2").style.width = Math.max(0, Math.min(100, p2Pct)) + "%";
+    document.getElementById("ultName2").innerText = p2.name === "Funeral" ? (p2.hp < 25 ? "SPIRIT SOOTHER" : "PARAMITA PAPILIO") : characterDB[p2.name].ultName;
     document.getElementById("stats2").innerHTML = getCharSpecificStats(p2);
   }
 }
@@ -3527,7 +4161,465 @@ function gameLoop() {
 
   for (let i = effects.length - 1; i >= 0; i--) {
     let ef = effects[i];
-    if (ef.type === "tyrant_sword_hit") {
+    if (ef.type === "funeral_papilio_transform") {
+      const t = 1 - ef.life / ef.maxLife;
+      const fade = ef.life / ef.maxLife;
+      const ease = Math.sin(Math.min(1, t) * Math.PI * 0.5);
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.translate(ef.x, ef.y);
+      ctx.globalAlpha = Math.min(1, 0.35 + fade * 0.65);
+
+      // Expanding pyro aura like a real transformation, not just a static ring.
+      const r = 16 + ease * 54;
+      ctx.shadowColor = "#ff513f"; ctx.shadowBlur = 28;
+      ctx.fillStyle = "rgba(198,40,56,0.24)";
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.72, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#ff8a62"; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = "rgba(255,216,151,0.75)"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.72, 0, Math.PI * 2); ctx.stroke();
+
+      // Eight large butterflies bursting outward.
+      for (let i = 0; i < 8; i++) {
+        const a = ef.angle + (i * Math.PI * 2) / 8 + t * 2.2;
+        const rr = 18 + ease * (55 + (i % 3) * 8);
+        const bx = Math.cos(a) * rr;
+        const by = Math.sin(a) * rr;
+        const sc = 0.7 + ease * 0.55;
+        ctx.save(); ctx.translate(bx, by); ctx.rotate(a + Math.PI / 2); ctx.scale(sc, sc);
+        ctx.fillStyle = i % 2 ? "#ff7b55" : "#ffbd7a";
+        ctx.shadowColor = "#ff563f"; ctx.shadowBlur = 13;
+        ctx.beginPath(); ctx.ellipse(-5, 0, 5, 10, -0.38, 0, Math.PI * 2); ctx.ellipse(5, 0, 5, 10, 0.38, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#650b18"; ctx.beginPath(); ctx.arc(0, 1, 2.1, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+
+      // Central blossom-shaped flare.
+      ctx.fillStyle = "rgba(255,109,77,0.82)"; ctx.shadowBlur = 24;
+      for (let i = 0; i < 6; i++) {
+        const a = i * Math.PI / 3;
+        ctx.save(); ctx.rotate(a);
+        ctx.beginPath(); ctx.ellipse(0, -10 - ease * 8, 4.5, 13 + ease * 8, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "funeral_papilio_burst") {
+      const t = 1 - ef.life / ef.maxLife;
+      const fade = 1 - t;
+      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.translate(ef.x, ef.y);
+      const r = 18 + t * 92;
+      ctx.globalAlpha = fade; ctx.shadowColor = "#ff553f"; ctx.shadowBlur = 26;
+      ctx.strokeStyle = "#ff7043"; ctx.lineWidth = 8;
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = "rgba(255,210,145,0.9)"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.58, 0, Math.PI * 2); ctx.stroke();
+      for (let i = 0; i < 14; i++) {
+        const a = (i * Math.PI * 2) / 14 + t * 5;
+        const rr = r * (0.7 + (i % 4) * 0.06);
+        ctx.save(); ctx.rotate(a); ctx.fillStyle = i % 2 ? "#ffb36b" : "#d83a3f";
+        ctx.beginPath(); ctx.ellipse(rr, 0, 3.2, 7, 0, 0, Math.PI * 2); ctx.ellipse(rr - 6, 0, 3.2, 7, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      }
+      ctx.restore(); ef.life--;
+    } else if (ef.type === "funeral_papilio") {
+      const t = 1 - ef.life / ef.maxLife;
+      const fade = ef.life / ef.maxLife;
+      const expand = Math.min(1, t * 1.7);
+      ctx.save();
+      ctx.translate(ef.x, ef.y);
+      ctx.rotate(ef.angle);
+      ctx.globalAlpha = Math.min(1, fade * 1.35);
+
+      // Main crimson-gold crescent, deliberately large but contained.
+      const r = 36 + ef.reach * expand;
+      ctx.shadowColor = "#ff553f";
+      ctx.shadowBlur = 28;
+      ctx.lineCap = "round";
+      ctx.strokeStyle = "rgba(255,87,70,0.22)";
+      ctx.lineWidth = ef.hitWidth * 0.48;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, -0.58, 0.58);
+      ctx.stroke();
+      ctx.shadowBlur = 12;
+      ctx.strokeStyle = "#d83a3f";
+      ctx.lineWidth = ef.hitWidth * 0.18;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, -0.50, 0.50);
+      ctx.stroke();
+      ctx.strokeStyle = "#ffba72";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, -0.46, 0.46);
+      ctx.stroke();
+
+      // Spirit silhouettes + butterfly particles riding the attack wave.
+      for (let n = 0; n < 4; n++) {
+        const bx = r * (0.28 + n * 0.18);
+        const by = Math.sin(t * 7 + n * 1.8) * (14 + n * 5);
+        ctx.save();
+        ctx.translate(bx, by);
+        const s = 0.65 + n * 0.07;
+        ctx.scale(s, s);
+        ctx.fillStyle = n % 2 === 0 ? "#ff6b52" : "#ffb36b";
+        ctx.shadowColor = "#ff553f";
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.ellipse(-5, 0, 5, 9, -0.25, 0, Math.PI * 2);
+        ctx.ellipse(5, 0, 5, 9, 0.25, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#5a0b16";
+        ctx.beginPath(); ctx.arc(0, 2, 2.2, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+
+      // Activation ring = the knockback/"push the spirits away" feeling.
+      ctx.strokeStyle = `rgba(255,180,116,${0.75 * fade})`;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(0, 0, 22 + expand * 50, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "funeral_papilio_soul") {
+      const t = 1 - ef.life / ef.maxLife;
+      const fade = ef.life / ef.maxLife;
+      ctx.save();
+      ctx.translate(ef.x, ef.y - t * 18);
+      ctx.globalAlpha = fade;
+      ctx.shadowColor = "#ff553f";
+      ctx.shadowBlur = 22;
+      ctx.fillStyle = "rgba(91,11,22,0.92)";
+      ctx.beginPath();
+      ctx.moveTo(0, -24 - t * 8);
+      ctx.quadraticCurveTo(-18, -10, -16, 10);
+      ctx.quadraticCurveTo(-12, 24, 0, 30);
+      ctx.quadraticCurveTo(12, 24, 16, 10);
+      ctx.quadraticCurveTo(18, -10, 0, -24 - t * 8);
+      ctx.fill();
+      ctx.fillStyle = "#ffb36b";
+      ctx.beginPath(); ctx.ellipse(-7, -2, 3, 6, -0.2, 0, Math.PI * 2); ctx.ellipse(7, -2, 3, 6, 0.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#ff553f";
+      ctx.beginPath(); ctx.arc(-7, -2, 1.7, 0, Math.PI * 2); ctx.arc(7, -2, 1.7, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#ff7043"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 7, 7, 0.15, Math.PI - 0.15); ctx.stroke();
+      for (let b = 0; b < 5; b++) {
+        const a = t * 5 + b * 1.25;
+        const rr = 30 + t * 18;
+        const px = Math.cos(a) * rr, py = Math.sin(a) * rr;
+        ctx.fillStyle = b % 2 ? "#ffb36b" : "#d83a3f";
+        ctx.beginPath(); ctx.ellipse(px - 3, py, 3, 5, -0.3, 0, Math.PI * 2); ctx.ellipse(px + 3, py, 3, 5, 0.3, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "funeral_spirit_soother") {
+      // Full 360-degree Spirit Soother swing. The ghost circles Funeral once,
+      // carrying a broad Pyro crescent rather than behaving like a projectile.
+      const t = 1 - ef.life / ef.maxLife;
+      const fade = Math.max(0, ef.life / ef.maxLife);
+      const windup = Math.min(1, t / 0.16);
+      const sweepT = Math.min(1, Math.max(0, (t - 0.12) / 0.70));
+      const impactT = Math.min(1, Math.max(0, (t - 0.78) / 0.22));
+      const swing = ef.angle - Math.PI + sweepT * Math.PI * 2;
+      const orbitR = 148;
+      const gx = ef.x + Math.cos(swing) * orbitR;
+      const gy = ef.y + Math.sin(swing) * orbitR;
+
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+
+      // Large wind-up aura / funeral flame core.
+      ctx.globalAlpha = 0.20 + windup * 0.30;
+      ctx.shadowColor = "#ff4937";
+      ctx.shadowBlur = 42;
+      ctx.fillStyle = "#8f1725";
+      ctx.beginPath();
+      ctx.arc(ef.x, ef.y, 34 + windup * 52, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Keep a thick trailing arc behind the rotating spirit so the swing reads as 360°.
+      if (sweepT > 0) {
+        ctx.save();
+        ctx.globalAlpha = 0.90 * fade;
+        ctx.translate(ef.x, ef.y);
+        ctx.rotate(ef.angle);
+        const arcR = 150;
+        const trail = 1.35;
+        const arcEnd = -Math.PI + sweepT * Math.PI * 2;
+        const arcStart = arcEnd - trail;
+
+        ctx.lineCap = "round";
+        ctx.shadowColor = "#ff3f2d";
+        ctx.shadowBlur = 42;
+        ctx.strokeStyle = "rgba(119,11,24,0.94)";
+        ctx.lineWidth = 42;
+        ctx.beginPath();
+        ctx.arc(0, 0, arcR, arcStart, arcEnd);
+        ctx.stroke();
+
+        ctx.shadowBlur = 28;
+        ctx.strokeStyle = "rgba(255,80,55,0.96)";
+        ctx.lineWidth = 19;
+        ctx.beginPath();
+        ctx.arc(0, 0, arcR - 6, arcStart, arcEnd);
+        ctx.stroke();
+
+        ctx.shadowBlur = 12;
+        ctx.strokeStyle = "rgba(255,220,181,0.92)";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(0, 0, arcR - 12, arcStart, arcEnd);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Casper-like spirit circling Funeral.
+      if (sweepT > 0 && sweepT < 1) {
+        ctx.save();
+        ctx.globalAlpha = 0.98 * fade;
+        ctx.translate(gx, gy);
+        ctx.rotate(swing + Math.PI / 2);
+        ctx.shadowColor = "#ff4534";
+        ctx.shadowBlur = 38;
+
+        const s = 1.45;
+        ctx.scale(s, s);
+
+        // Head.
+        ctx.fillStyle = "rgba(255,239,215,0.99)";
+        ctx.beginPath();
+        ctx.ellipse(0, -14, 29, 24, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Ghost body, wider and more recognizable.
+        ctx.beginPath();
+        ctx.moveTo(-27, -2);
+        ctx.quadraticCurveTo(-40, 20, -28, 44);
+        ctx.quadraticCurveTo(-18, 64, -7, 48);
+        ctx.quadraticCurveTo(0, 72, 7, 48);
+        ctx.quadraticCurveTo(18, 64, 28, 44);
+        ctx.quadraticCurveTo(40, 20, 27, -2);
+        ctx.quadraticCurveTo(0, 12, -27, -2);
+        ctx.fill();
+
+        // Dark red facial features.
+        ctx.fillStyle = "#9a1829";
+        ctx.beginPath();
+        ctx.ellipse(-9, -15, 4.4, 6.8, -0.10, 0, Math.PI * 2);
+        ctx.ellipse(9, -15, 4.4, 6.8, 0.10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#76101e";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, -2, 11, 0.12, Math.PI - 0.12);
+        ctx.stroke();
+
+        // Long Pyro tails.
+        ctx.strokeStyle = "#ff7043";
+        ctx.lineWidth = 11;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(-14, 39); ctx.quadraticCurveTo(-48, 70, -18, 111);
+        ctx.moveTo(14, 39); ctx.quadraticCurveTo(48, 70, 18, 111);
+        ctx.stroke();
+        ctx.strokeStyle = "#ffc07d";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-12, 42); ctx.quadraticCurveTo(-42, 72, -17, 104);
+        ctx.moveTo(12, 42); ctx.quadraticCurveTo(42, 72, 17, 104);
+        ctx.stroke();
+        ctx.restore();
+
+        // Butterfly / ember wake behind the spirit.
+        ctx.save();
+        ctx.globalAlpha = 0.78 * fade;
+        for (let i = 0; i < 18; i++) {
+          const back = 24 + i * 8;
+          const wobble = Math.sin(t * 26 + i * 1.7) * (5 + i * 0.45);
+          const bx = gx - Math.cos(swing) * back + Math.cos(swing + Math.PI / 2) * wobble;
+          const by = gy - Math.sin(swing) * back + Math.sin(swing + Math.PI / 2) * wobble;
+          const size = Math.max(1.3, 5.0 - i * 0.16);
+          ctx.fillStyle = i % 2 ? "#ffb36b" : "#d83a3f";
+          ctx.shadowColor = ctx.fillStyle;
+          ctx.shadowBlur = 12;
+          ctx.beginPath();
+          ctx.ellipse(bx - size, by, size, size * 1.8, swing, 0, Math.PI * 2);
+          ctx.ellipse(bx + size, by, size, size * 1.8, swing + Math.PI, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      if (impactT > 0) {
+        ctx.save();
+        ctx.globalAlpha = (1 - impactT) * 0.95;
+        ctx.translate(ef.impactX, ef.impactY);
+        ctx.shadowColor = "#ff4d3d";
+        ctx.shadowBlur = 34;
+        ctx.strokeStyle = "#ff7043";
+        ctx.lineWidth = 11;
+        ctx.beginPath();
+        ctx.arc(0, 0, 28 + impactT * 88, -Math.PI * 0.95, Math.PI * 0.95);
+        ctx.stroke();
+        ctx.strokeStyle = "#ffd39a";
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, 20 + impactT * 66, -Math.PI * 0.95, Math.PI * 0.95);
+        ctx.stroke();
+        for (let i = 0; i < 18; i++) {
+          const a = (i / 18) * Math.PI * 2;
+          const inner = 20 + impactT * 14;
+          const outer = 52 + impactT * 88;
+          ctx.strokeStyle = i % 2 ? "#ffb36b" : "#d83a3f";
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(a) * inner, Math.sin(a) * inner);
+          ctx.lineTo(Math.cos(a) * outer, Math.sin(a) * outer);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      ctx.globalCompositeOperation = "source-over";
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "funeral_burn_apply" || ef.type === "funeral_burn_tick") {
+      const t = 1 - ef.life / ef.maxLife;
+      const fade = ef.life / ef.maxLife;
+      ctx.save();
+      ctx.globalAlpha = fade;
+      ctx.shadowColor = "#ff4d3d";
+      ctx.shadowBlur = 14;
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 + t * 4;
+        const rr = 8 + i * 3;
+        const fx = ef.x + Math.cos(a) * rr;
+        const fy = ef.y + Math.sin(a) * rr - t * 8;
+        ctx.fillStyle = i % 2 ? "#ffb36b" : "#ff553f";
+        ctx.beginPath();
+        ctx.ellipse(fx, fy, 2.5, 5 + t * 2, a, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "funeral_charge") {
+      const t = 1 - ef.life / ef.maxLife;
+      const px = ef.startX + (ef.endX - ef.startX) * Math.min(1, t * 1.05);
+      const py = ef.startY + (ef.endY - ef.startY) * Math.min(1, t * 1.05);
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(ef.angle);
+      const fade = Math.max(0, 1 - t);
+      ctx.globalAlpha = fade;
+
+      // Long flame trail behind the dash.
+      ctx.shadowColor = "#ff553f";
+      ctx.shadowBlur = ef.papilio ? 28 : 18;
+      ctx.strokeStyle = ef.papilio ? "#ff7043" : "#c0392b";
+      ctx.lineWidth = ef.papilio ? 15 : 9;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(-8, 0);
+      ctx.quadraticCurveTo(-45, -8, -95, Math.sin(t * 25) * 8);
+      ctx.stroke();
+
+      ctx.strokeStyle = "#ffbd7a";
+      ctx.lineWidth = ef.papilio ? 4 : 2.5;
+      ctx.beginPath();
+      ctx.moveTo(-5, 0);
+      ctx.quadraticCurveTo(-38, -4, -88, Math.sin(t * 25) * 5);
+      ctx.stroke();
+
+      // Flame butterflies on the Papilio charge.
+      const count = ef.papilio ? 10 : 5;
+      for (let b = 0; b < count; b++) {
+        const rr = 20 + b * 9;
+        const yy = Math.sin(t * 16 + b * 1.7) * (6 + b * 0.8);
+        const side = b % 2 ? 1 : -1;
+        ctx.fillStyle = b % 2 ? "#ffb36b" : "#d83a3f";
+        ctx.beginPath();
+        ctx.ellipse(-rr, yy + side * 3, 3.2, 6.5, side * 0.25, 0, Math.PI * 2);
+        ctx.ellipse(-rr - 4, yy - side * 3, 3.2, 6.5, -side * 0.25, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Forward arc at the tip, emphasizing the Homa direction.
+      ctx.shadowBlur = ef.papilio ? 20 : 12;
+      ctx.strokeStyle = "#ff7043";
+      ctx.lineWidth = ef.papilio ? 6 : 4;
+      ctx.beginPath();
+      ctx.arc(10, 0, ef.papilio ? 28 : 20, -0.7, 0.7);
+      ctx.stroke();
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "funeral_charge_hit") {
+      const t = 1 - ef.life / ef.maxLife;
+      ctx.save();
+      ctx.translate(ef.x, ef.y);
+      ctx.rotate(ef.angle);
+      ctx.globalAlpha = Math.max(0, 1 - t);
+      ctx.shadowColor = "#ff553f"; ctx.shadowBlur = 20;
+      ctx.strokeStyle = "#ff7043"; ctx.lineWidth = 5; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.arc(0, 0, 18 + t * 48, -0.8, 0.8); ctx.stroke();
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "hutao_ult") {
+      const t = 1 - ef.life / ef.maxLife;
+      const r = 28 + t * 145;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, ef.life / ef.maxLife);
+      ctx.strokeStyle = "#ff7043";
+      ctx.lineWidth = 7;
+      ctx.shadowColor = "#ff553f";
+      ctx.shadowBlur = 28;
+      ctx.beginPath();
+      ctx.arc(ef.x, ef.y, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = "#ffbd7a";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(ef.x, ef.y, r * 0.72, 0, Math.PI * 2);
+      ctx.stroke();
+      for (let p = 0; p < 14; p++) {
+        const a = (p * Math.PI * 2) / 14 - t * 2.8;
+        const px = ef.x + Math.cos(a) * r;
+        const py = ef.y + Math.sin(a) * r;
+        ctx.fillStyle = p % 2 === 0 ? "#c0392b" : "#ffb36b";
+        ctx.beginPath();
+        ctx.ellipse(px - 2.5, py, 3, 6, -0.25, 0, Math.PI * 2);
+        ctx.ellipse(px + 2.5, py, 3, 6, 0.25, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "hutao_blossom_burst") {
+      const t = 1 - ef.life / ef.maxLife;
+      const r = 12 + t * 52;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, ef.life / ef.maxLife);
+      ctx.strokeStyle = "#c0392b";
+      ctx.lineWidth = 3;
+      ctx.shadowColor = "#ff553f";
+      ctx.shadowBlur = 14;
+      ctx.beginPath();
+      ctx.arc(ef.x, ef.y, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "hutao_blossom_mark") {
+      const t = ef.life / ef.maxLife;
+      ctx.save();
+      ctx.globalAlpha = t;
+      ctx.strokeStyle = "#ff6b52";
+      ctx.lineWidth = 2;
+      ctx.shadowColor = "#ff553f";
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(ef.x, ef.y, 18 + (1 - t) * 12, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "tyrant_sword_hit") {
       ctx.save(); const progress=1-ef.life/ef.maxLife; ctx.beginPath(); ctx.arc(ef.x,ef.y,10+progress*30,0,Math.PI*2);
       ctx.strokeStyle=`rgba(164,200,225,${1-progress})`; ctx.lineWidth=3; ctx.shadowColor="#a4c8e1"; ctx.shadowBlur=10; ctx.stroke(); ctx.restore(); ef.life--;
     } else if (ef.type === "tyrant_chains") {
@@ -3818,12 +4910,42 @@ function drawThumbnail(canvasEl, charName) {
   tCtx.stroke();
 
   if (stats.weapons > 0) {
-    tCtx.strokeStyle = stats.color;
-    tCtx.lineWidth = 2.5;
-    tCtx.beginPath();
-    tCtx.moveTo(w / 2, h / 2);
-    tCtx.lineTo(w / 2 + Math.cos(0.4) * (w * 0.42), h / 2 + Math.sin(0.4) * (h * 0.42));
-    tCtx.stroke();
+    const ang = 0.4;
+    const cx = w / 2, cy = h / 2;
+    const ex = cx + Math.cos(ang) * (w * 0.42);
+    const ey = cy + Math.sin(ang) * (h * 0.42);
+
+    if (charName === "Funeral") {
+      const ux = Math.cos(ang), uy = Math.sin(ang), px = -uy, py = ux;
+      const tipX = ex + ux * 5, tipY = ey + uy * 5;
+      const baseX = ex - ux * 5, baseY = ey - uy * 5;
+      tCtx.save();
+      tCtx.lineCap = "round"; tCtx.shadowColor = "#8f1725"; tCtx.shadowBlur = 6;
+      tCtx.strokeStyle = "#3b080f"; tCtx.lineWidth = 3.8;
+      tCtx.beginPath(); tCtx.moveTo(cx, cy); tCtx.lineTo(baseX, baseY); tCtx.stroke();
+      tCtx.strokeStyle = "#8f1725"; tCtx.lineWidth = 2.1;
+      tCtx.beginPath(); tCtx.moveTo(cx, cy); tCtx.lineTo(baseX, baseY); tCtx.stroke();
+      tCtx.strokeStyle = "#e0a84b"; tCtx.lineWidth = 1.8;
+      tCtx.beginPath(); tCtx.moveTo(ex - ux * 6 - px * 2.5, ey - uy * 6 - py * 2.5); tCtx.lineTo(ex - ux * 6 + px * 2.5, ey - uy * 6 + py * 2.5); tCtx.stroke();
+      tCtx.fillStyle = "#b51f2e";
+      tCtx.beginPath();
+      tCtx.moveTo(tipX, tipY);
+      tCtx.quadraticCurveTo(ex - ux * 2 + px * 4, ey - uy * 2 + py * 4, ex - ux * 4 + px * 3, ey - uy * 4 + py * 3);
+      tCtx.quadraticCurveTo(ex - ux * 5, ey - uy * 5, ex - ux * 4 - px * 3, ey - uy * 4 - py * 3);
+      tCtx.quadraticCurveTo(ex - ux * 2 - px * 4, ey - uy * 2 - py * 4, tipX, tipY);
+      tCtx.closePath(); tCtx.fill();
+      tCtx.strokeStyle = "#5f0b14"; tCtx.lineWidth = 1; tCtx.stroke();
+      tCtx.strokeStyle = "#efc36b"; tCtx.lineWidth = 1;
+      tCtx.beginPath(); tCtx.moveTo(ex - ux * 3, ey - uy * 3); tCtx.lineTo(tipX - ux * 1, tipY - uy * 1); tCtx.stroke();
+      tCtx.restore();
+    } else {
+      tCtx.strokeStyle = stats.color;
+      tCtx.lineWidth = 2.5;
+      tCtx.beginPath();
+      tCtx.moveTo(cx, cy);
+      tCtx.lineTo(ex, ey);
+      tCtx.stroke();
+    }
   }
 }
 
