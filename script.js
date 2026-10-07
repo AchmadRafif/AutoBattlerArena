@@ -257,6 +257,20 @@ const characterDB = {
     desc: "Six Eyes, Mugen, Hollow Purple",
     ultMax: 2500,
   },
+  Kinich: {
+    color: "#8BAE66",
+    hp: 100,
+    damage: 2.0,
+    speed: 2.7,
+    weapons: 1,
+    wLen: 68,
+    wWidth: 12,
+    rotSpeed: 0.022,
+    ultName: "BOOMSHAKALAKA",
+    ultColor: "#8BAE66",
+    desc: "Claymore, Canopy Grapple, Nightsoul Field & Ajaw",
+    ultMax: 2500,
+  },
   "Funeral": {
     color: "#8f1725",
     hp: 100,
@@ -417,6 +431,7 @@ let p1Choice = "Copycat";
 let p2Choice = "Infinity";
 let effects = [];
 let infinitySkills = [];
+let kinichSkills = [];
 let soundTraps = [];
 let scatteredSwords = [];
 let killerQueenSkills = [];
@@ -748,6 +763,291 @@ class RedWave {
     ctx.fill();
     ctx.restore();
   }
+}
+
+
+// ================= KINICH =================
+// Pixel-art inspired grapple / projectile effects. These are drawn directly in
+// canvas so the character stays asset-free while still reading like Kinich.
+class KinichProjectile {
+  constructor(x,y,target,owner,options={}){
+    this.x=x;this.y=y;this.target=target;this.owner=owner;this.life=options.life??180;this.speed=options.speed??9;this.damageMultiplier=options.damageMultiplier??1.1;this.scale=options.scale??1;this.isCharged=!!options.isCharged;this.isUlt=!!options.isUlt;this.isFinal=!!options.isFinal;this.homing=options.homing!==undefined?!!options.homing:true;
+    const dx=(target?target.x:x+1)-x,dy=(target?target.y:y)-y;this.angle=Math.atan2(dy,dx);this.vx=Math.cos(this.angle)*this.speed;this.vy=Math.sin(this.angle)*this.speed;this.damage=owner.damage*this.damageMultiplier;
+  }
+  update(){
+    if(!this.owner||this.owner.hp<=0){this.life=0;return;}
+    if(this.homing){
+      if(!this.target||this.target.hp<=0){this.life=0;return;}
+      const dx=this.target.x-this.x,dy=this.target.y-this.y,dist=Math.hypot(dx,dy)||1;this.angle=Math.atan2(dy,dx);this.vx=Math.cos(this.angle)*this.speed;this.vy=Math.sin(this.angle)*this.speed;this.x+=this.vx;this.y+=this.vy;this.life--;
+      if(dist<this.target.radius+(this.isFinal?22:this.isCharged?16:10)){
+        const dealt=this.target.takeDamage(this.damage,this.owner,true);this.target.iFrames=10;
+        spawnText((this.isFinal?"AJAW CANNON -":this.isUlt?"AJAW -":this.isCharged?"SPIKER -":"-")+dealt.toFixed(1),this.target.x,this.target.y-(this.isFinal?34:this.isCharged?28:12),this.isFinal?"#FFB347":this.isCharged?"#FFB347":"#7CF7B7");
+        effects.push({type:this.isFinal?"kinich_ult_final_impact":this.isUlt?"kinich_ult_shot_impact":"kinich_spiker_hit",x:this.target.x,y:this.target.y,life:this.isFinal?38:this.isUlt?18:this.isCharged?28:14,maxLife:this.isFinal?38:this.isUlt?18:this.isCharged?28:14,big:this.isCharged});
+        this.life=0;
+      }
+      return;
+    }
+
+    // Non-homing Ajaw barrage: direction is fixed at spawn, so it can miss and
+    // behaves like a thrown weapon rather than a tracking projectile.
+    this.x+=this.vx;this.y+=this.vy;this.life--;
+    const hitRadius=this.isFinal?22:this.isUlt?14:this.isCharged?16:10;
+    for(const b of balls){
+      if(b===this.owner||b.team===this.owner.team||b.hp<=0||b.isClone)continue;
+      const dist=Math.hypot(b.x-this.x,b.y-this.y);
+      if(dist<b.radius+hitRadius){
+        const dealt=b.takeDamage(this.damage,this.owner,true);b.iFrames=10;
+        spawnText((this.isFinal?"AJAW CANNON -":this.isUlt?"AJAW -":this.isCharged?"SPIKER -":"-")+dealt.toFixed(1),b.x,b.y-(this.isFinal?34:this.isCharged?28:12),this.isFinal?"#FFB347":this.isCharged?"#FFB347":"#7CF7B7");
+        effects.push({type:this.isFinal?"kinich_ult_final_impact":this.isUlt?"kinich_ult_shot_impact":"kinich_spiker_hit",x:b.x,y:b.y,life:this.isFinal?38:this.isUlt?18:this.isCharged?28:14,maxLife:this.isFinal?38:this.isUlt?18:this.isCharged?28:14,big:this.isCharged});
+        this.life=0;
+        break;
+      }
+    }
+  }
+  draw(){
+    if(this.life<=0)return;
+    ctx.save();
+    ctx.translate(Math.round(this.x),Math.round(this.y));
+    ctx.rotate(this.angle);
+    ctx.imageSmoothingEnabled=false;
+
+    // Fully block-built pixel projectile. Every visible shape is aligned to a
+    // small pixel grid so it reads like an in-game sprite rather than a smooth
+    // vector projectile.
+    const sc=this.scale*(this.isFinal?2.55:this.isCharged?1.9:this.isUlt?1.28:1);
+    const outline='#203A34', deep='#355B50', body='#5F8B62', light='#8BAE66',
+          gold='#C49A4A', pale='#D4C98E';
+    const px=(v)=>Math.round(v*sc);
+    const rect=(color,x,y,w,h)=>{ctx.fillStyle=color;ctx.fillRect(px(x),px(y),Math.max(1,px(w)),Math.max(1,px(h)));};
+
+    // Compact squared tail / exhaust.
+    rect(outline,-28,-4,5,8);
+    rect(deep,-23,-5,6,10);
+    rect(body,-18,-4,5,8);
+    rect(light,-14,-2,4,4);
+
+    if(this.isFinal){
+      // Giant Ajaw cannon: stepped diamond with a chunky dark jaw silhouette.
+      rect(outline,-10,-16,20,32);
+      rect(outline,-18,-10,36,20);
+      rect(deep,-14,-12,28,24);
+      rect(body,-8,-9,18,18);
+      rect(light,-3,-6,13,12);
+      rect(gold,7,-4,7,8);
+      rect(pale,11,-2,7,4);
+      rect(outline,18,-8,8,16);
+      rect(deep,20,-5,8,10);
+      // Pixel fins.
+      rect(gold,-13,-20,7,5); rect(gold,8,-20,7,5);
+      rect(deep,-22,9,7,5); rect(gold,16,8,8,5);
+    } else if(this.isCharged){
+      // Large Scalespiker: a 4x-ish stepped spear / shard.
+      rect(outline,-8,-13,8,26);
+      rect(outline,0,-17,10,34);
+      rect(deep,-3,-13,17,26);
+      rect(body,2,-9,14,18);
+      rect(light,6,-5,13,10);
+      rect(gold,12,-3,8,6);
+      rect(pale,17,-1,6,2);
+      rect(deep,3,-18,5,5);
+      rect(deep,3,13,5,5);
+    } else if(this.isUlt){
+      // Ajaw barrage shot: compact pixel beast-head / arrow silhouette.
+      rect(outline,-8,-10,16,20);
+      rect(outline,4,-8,12,16);
+      rect(deep,-5,-8,19,16);
+      rect(body,0,-6,15,12);
+      rect(light,4,-4,10,8);
+      rect(gold,12,-2,6,4);
+      rect(pale,15,-1,6,2);
+      rect(outline,7,-13,4,4);
+      rect(outline,7,9,4,4);
+      rect(gold,-7,-8,4,4);
+      rect(gold,-7,4,4,4);
+    } else {
+      // Standard Kinich shot: simple stepped diamond, no smooth triangles.
+      rect(outline,-7,-8,14,16);
+      rect(deep,-11,-5,22,10);
+      rect(body,-6,-5,15,10);
+      rect(light,-2,-4,9,8);
+      rect(gold,6,-3,5,6);
+      rect(pale,9,-1,4,2);
+      rect(deep,-3,-11,5,4);
+      rect(deep,-3,7,5,4);
+    }
+
+    // A few hard-edged trailing pixels. No blur / glow.
+    const trailColor=this.isFinal?gold:(this.isUlt?light:deep);
+    ctx.fillStyle=trailColor;
+    const trail=[[-34,-5,3,3],[-31,3,4,3],[-38,0,2,2],[-27,-9,3,2]];
+    for(const [x,y,w,h] of trail)ctx.fillRect(px(x),px(y),Math.max(1,px(w)),Math.max(1,px(h)));
+    ctx.restore();
+  }
+}
+
+class KinichGrapple {
+  constructor(owner,target){
+    this.owner=owner; this.target=target;
+    // Grapple movement is fast again: Kinich commits to a quick retreat toward the far side.
+    this.life=32; this.maxLife=32;
+    this.angle=Math.atan2(target.y-owner.y,target.x-owner.x);
+    let ax=owner.x-target.x, ay=owner.y-target.y, d=Math.hypot(ax,ay)||1;
+    this.awayX=ax/d; this.awayY=ay/d;
+    if(d<1){this.awayX=-Math.cos(this.angle);this.awayY=-Math.sin(this.angle);}
+  }
+  update(){
+    if(!this.owner||this.owner.hp<=0||!this.target||this.target.hp<=0){this.life=0;return;}
+    this.angle=Math.atan2(this.target.y-this.owner.y,this.target.x-this.owner.x);
+    this.owner.vx=0; this.owner.vy=0;
+    // Fast pull across the target's near side, then commit to the far side.
+    const retreatDistance=172;
+    let desiredX=this.target.x+this.awayX*retreatDistance;
+    let desiredY=this.target.y+this.awayY*retreatDistance;
+    desiredX=Math.max(this.owner.radius,Math.min(canvas.width-this.owner.radius,desiredX));
+    desiredY=Math.max(this.owner.radius,Math.min(canvas.height-this.owner.radius,desiredY));
+    const progress=1-this.life/this.maxLife;
+    if(progress>0.06){
+      const pull=Math.min(.46,.16+progress*.34);
+      this.owner.x+=(desiredX-this.owner.x)*pull;
+      this.owner.y+=(desiredY-this.owner.y)*pull;
+    }
+    this.life--;
+    if(this.life<=0){
+      this.owner.x=desiredX;this.owner.y=desiredY;
+      this.owner.angle=Math.atan2(this.target.y-this.owner.y,this.target.x-this.owner.x);
+      this.owner.kinichSkillState="field";this.owner.kinichAjawMode=true;
+      this.owner.kinichField=new KinichField(this.owner,this.target);this.owner.kinichSkillTarget=this.target;
+      kinichSkills.push(this.owner.kinichField);
+      effects.push({type:"kinich_grapple_hit",x:this.target.x,y:this.target.y,life:22,maxLife:22});
+      spawnText("NIGHTSOUL FIELD!",this.owner.x,this.owner.y-28,"#8BAE66");
+      this.life=0;
+    }
+  }
+  draw(){
+    if(!this.owner||!this.target)return;
+    const sx=Math.round(this.owner.x),sy=Math.round(this.owner.y),tx=Math.round(this.target.x),ty=Math.round(this.target.y);
+    const dx=tx-sx,dy=ty-sy,len=Math.hypot(dx,dy)||1,ux=dx/len,uy=dy/len;
+    ctx.save();ctx.imageSmoothingEnabled=false;
+    ctx.strokeStyle="#203A34";ctx.lineWidth=6;ctx.lineCap="square";ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(tx-ux*12,ty-uy*12);ctx.stroke();
+    ctx.strokeStyle="#5F8B62";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(tx-ux*12,ty-uy*12);ctx.stroke();
+    const count=Math.floor(len/12);for(let i=1;i<count;i++){const t=i/count,px=Math.round(sx+dx*t),py=Math.round(sy+dy*t);ctx.fillStyle=i%3===0?"#C49A4A":"#8BAE66";ctx.fillRect(px-1,py-1,3,3);}
+    ctx.translate(Math.round(tx-ux*10),Math.round(ty-uy*10));ctx.rotate(this.angle);
+    ctx.fillStyle="#203A34";ctx.fillRect(-9,-7,18,14);ctx.fillStyle="#5F8B62";ctx.fillRect(-6,-5,11,9);ctx.fillStyle="#C49A4A";ctx.fillRect(5,-2,6,4);ctx.fillRect(-2,-8,4,3);ctx.fillRect(-2,5,4,3);
+    ctx.restore();
+  }
+}
+
+class KinichUltBoss {
+  constructor(owner){this.owner=owner;this.life=9999;}
+  update(){if(!this.owner||this.owner.hp<=0||!this.owner.isUltActive)this.life=0;}
+  getPosition(){return {x:canvas.width*0.5,y:-62};}
+  draw(){
+    if(!this.owner||!this.owner.isUltActive)return;
+    const p=this.owner.kinichUltPhase;if(!p||p==='none')return;
+    const pos=this.getPosition();
+    const scale=p==='windup'?3.15:p==='barrage'?3.35:p==='laserCharge'?3.75:3.65;
+    // Face downward from outside the top edge of the arena.
+    drawKinichAjaw(pos.x,pos.y,scale,Math.PI/2/0.10);
+    ctx.save();ctx.imageSmoothingEnabled=false;
+    if(p==='laserCharge'){
+      const pulse=Math.floor(Date.now()/90)%2;
+      ctx.fillStyle=pulse?'#D8C94A':'#8BAE66';ctx.fillRect(Math.round(pos.x-32),Math.round(pos.y+78),64,5);
+      ctx.fillStyle='#1A241F';ctx.fillRect(Math.round(pos.x-18),Math.round(pos.y+72),36,4);
+      ctx.fillStyle='#D8C94A';ctx.fillRect(Math.round(pos.x-10),Math.round(pos.y+68),20,4);
+    }
+    ctx.restore();
+  }
+}
+
+class KinichUltLaser {
+  constructor(owner, targets){
+    this.owner=owner;
+    this.life=60;
+    this.maxLife=60;
+    this.hasHit=false;
+    this.x=canvas.width*0.5;
+    this.y=8;
+    this.targets=Array.isArray(targets)
+      ? targets.filter(t=>t&&t.hp>0&&t.team!==owner.team)
+      : (targets&&targets.hp>0&&targets.team!==owner.team ? [targets] : []);
+    this.beams=this.targets.map(t=>({target:t,angle:Math.atan2(t.y-this.y,t.x-this.x),length:1400}));
+  }
+  update(){
+    if(!this.owner||this.owner.hp<=0){this.life=0;return;}
+    if(!this.hasHit){
+      this.hasHit=true;
+      for(const beam of this.beams){
+        const b=beam.target;
+        if(!b||b.hp<=0||b.team===this.owner.team)continue;
+        // The final Ajaw laser hits every living opponent individually,
+        // including Copycat/Monkey King clones.
+        const dealt=b.takeDamage(this.owner.damage*11.0,this.owner);
+        spawnText("AJAW LASER -"+dealt.toFixed(1),b.x,b.y-30,"#D8C94A");
+      }
+    }
+    for(const beam of this.beams){
+      if(beam.target&&beam.target.hp>0){
+        beam.angle=Math.atan2(beam.target.y-this.y,beam.target.x-this.x);
+      }
+    }
+    this.life--;
+  }
+  draw(){
+    if(!this.owner||this.life<=0)return;
+    const alpha=Math.min(1,this.life<12?this.life/12:1);
+    ctx.save();
+    ctx.imageSmoothingEnabled=false;
+    ctx.globalAlpha=alpha;
+    for(const beam of this.beams){
+      ctx.save();
+      ctx.translate(Math.round(this.x),Math.round(this.y));
+      ctx.rotate(beam.angle);
+      const len=beam.length;
+      ctx.fillStyle='#111814';ctx.fillRect(0,-27,len,54);
+      ctx.fillStyle='#314A36';ctx.fillRect(0,-19,len,38);
+      ctx.fillStyle='#8BAE66';ctx.fillRect(0,-11,len,22);
+      ctx.fillStyle='#D8C94A';ctx.fillRect(0,-4,len,8);
+      for(let i=0;i<24;i++){
+        const px=60+i*48,h=(i%3===0?9:6);
+        ctx.fillStyle=i%2?'#203128':'#526B3E';
+        ctx.fillRect(px,-h-10,18,h);
+        ctx.fillRect(px,10,18,h);
+      }
+      ctx.fillStyle='#F0E39A';ctx.fillRect(0,-1,34,2);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+}
+
+class KinichField {
+  constructor(owner,target){this.owner=owner;this.target=target;this.life=360;this.maxLife=360;this.radius=190;this.orbitRadius=150;this.orbitAngle=Math.atan2(owner.y-target.y,owner.x-target.x);this.points=[];for(let i=0;i<5;i++){const angle=(i*Math.PI*2/5)+((Math.random()-.5)*0.32);this.points.push({angle,radius:138+Math.random()*40,used:false,pulse:Math.random()*Math.PI*2});}}
+  update(){
+    if(!this.owner||this.owner.hp<=0||!this.target||this.target.hp<=0){this.life=0;this.finish();return;}this.life--;
+    // The Nightsoul orbit belongs to the Skill, not the Ultimate. BOOMSHAKALAKA
+    // must never detach Kinich from an active field/orbit.
+    if(this.owner.kinichSkillState==="field"&&!this.owner.kinichChargeTimer){
+      this.orbitAngle+=.024;
+      const x=this.target.x+Math.cos(this.orbitAngle)*this.orbitRadius,
+            y=this.target.y+Math.sin(this.orbitAngle)*this.orbitRadius;
+      this.owner.x=Math.max(this.owner.radius,Math.min(canvas.width-this.owner.radius,x));
+      this.owner.y=Math.max(this.owner.radius,Math.min(canvas.height-this.owner.radius,y));
+      this.owner.angle=Math.atan2(this.target.y-this.owner.y,this.target.x-this.owner.x);
+      this.owner.vx=0;this.owner.vy=0;
+    }
+    if(this.owner.kinichChargeTimer>0){this.owner.vx=0;this.owner.vy=0;}
+    for(const pt of this.points){
+      if(pt.used)continue;
+      const px=this.target.x+Math.cos(pt.angle)*pt.radius,py=this.target.y+Math.sin(pt.angle)*pt.radius;
+      if(Math.hypot(this.owner.x-px,this.owner.y-py)<this.owner.radius+10&&this.owner.kinichChargeTimer<=0){
+        pt.used=true;this.owner.kinichChargeTimer=24;this.owner.kinichChargeTarget=this.target;
+        effects.push({type:"kinich_charge_start",x:this.owner.x,y:this.owner.y,life:24,maxLife:24});
+        spawnText("CHARGING SPIKER!",this.owner.x,this.owner.y-28,"#8BAE66");break;
+      }
+    }
+    if(this.life<=0)this.finish();}
+  finish(){if(!this.owner)return;this.owner.kinichField=null;this.owner.kinichSkillState="idle";this.owner.kinichAjawMode=false;this.owner.kinichChargeTimer=0;this.owner.kinichChargeTarget=null;this.owner.kinichSkillTarget=null;}
+  draw(){if(!this.owner||!this.target||this.life<=0)return;const fade=Math.min(1,this.life/24,(this.maxLife-this.life+18)/18),t=Date.now()*.0015;ctx.save();ctx.imageSmoothingEnabled=false;ctx.globalCompositeOperation="lighter";ctx.globalAlpha=.13*fade;ctx.fillStyle="#8BAE66";ctx.shadowColor="transparent";ctx.shadowBlur=0;ctx.beginPath();ctx.arc(this.target.x,this.target.y,this.radius,0,Math.PI*2);ctx.fill();ctx.globalAlpha=.78*fade;ctx.strokeStyle="#8BAE66";ctx.lineWidth=2.5;ctx.setLineDash([13,10]);ctx.beginPath();ctx.arc(this.target.x,this.target.y,this.radius,t%(Math.PI*2),t%(Math.PI*2)+Math.PI*1.72);ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=.34*fade;ctx.strokeStyle="#8BAE66";ctx.lineWidth=1.25;ctx.beginPath();ctx.arc(this.target.x,this.target.y,this.orbitRadius+2,0,Math.PI*2);ctx.stroke();for(const pt of this.points){if(pt.used)continue;const px=this.target.x+Math.cos(pt.angle)*pt.radius,py=this.target.y+Math.sin(pt.angle)*pt.radius,pulse=1+Math.sin(t*4+pt.pulse)*.16;ctx.save();ctx.translate(Math.round(px),Math.round(py));ctx.scale(pulse,pulse);ctx.shadowColor="transparent";ctx.shadowBlur=0;ctx.fillStyle="#526B3E";ctx.fillRect(-8,-8,16,16);ctx.fillStyle="#8BAE66";ctx.fillRect(-5,-5,10,10);ctx.fillStyle="#C4D89A";ctx.fillRect(-2,-2,4,4);ctx.restore();}ctx.restore();}
 }
 
 class PurpleBeam {
@@ -1603,6 +1903,24 @@ class Ball {
     this.funeralChargeAttackTarget = null;
     this.funeralChargeAttackHit = false;
     this.funeralChargeAttackAngle = 0;
+
+    // Kinich
+    this.kinichMarkTarget = null;
+    this.kinichSkillCD = 1200;
+    this.kinichSkillState = "idle";
+    this.kinichSkillTarget = null;
+    this.kinichSkillAimTimer = 0;
+    this.kinichAjawMode = false;
+    this.kinichField = null;
+    this.kinichFieldRadius = 108;
+    this.kinichChargeTimer = 0;
+    this.kinichChargeTarget = null;
+    this.kinichAttackCD = 18;
+    this.kinichUltPhase = "none";
+    this.kinichUltTimer = 0;
+    this.kinichUltShots = 0;
+    this.kinichUltTarget = null;
+    this.kinichUltFinalHit = false;
   }
 
 
@@ -1713,6 +2031,7 @@ class Ball {
   getWeaponSegments() {
     let segs = [];
     if (this.weapons === 0) return segs;
+    if (this.name === "Kinich" && this.kinichAjawMode) return segs;
 
     if (this.name === "Bloodchain" && this.bloodchainBankai) {
       let ang = this.angle;
@@ -1858,6 +2177,77 @@ class Ball {
       ctx.lineWidth = 2;
       ctx.stroke();
       ctx.restore();
+    }
+
+    if (this.name === "Kinich") {
+      // Restore the original clean Copycat / Infinity-style Kinich aura.
+      // Keep the original teal/emerald + warm orange palette exactly here.
+      ctx.save();
+      const pulse = Math.sin(Date.now() * 0.01) * 3;
+      const outer = this.radius + 6 + pulse;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, outer, 0, Math.PI * 2);
+      ctx.fillStyle = this.isUltActive ? "rgba(255,138,36,0.22)" : "rgba(24,199,122,0.22)";
+      ctx.fill();
+      ctx.shadowColor = this.isUltActive ? "#FF8A24" : "#18C77A";
+      ctx.shadowBlur = this.isUltActive ? 18 : 12;
+      ctx.strokeStyle = this.isUltActive ? "rgba(255,138,36,0.78)" : "rgba(24,199,122,0.72)";
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+
+      // Tiny blocky Nightsoul sparks, same visual language as the old Kinich.
+      const sparkCount = 4 + (this.kinichAjawMode ? 2 : 0);
+      for (let i = 0; i < sparkCount; i++) {
+        const a = Date.now() * 0.0011 + i * (Math.PI * 2 / sparkCount);
+        const rr = this.radius + 11 + Math.sin(Date.now() * 0.003 + i) * 2;
+        const sx = Math.round(this.x + Math.cos(a) * rr);
+        const sy = Math.round(this.y + Math.sin(a) * rr);
+        ctx.fillStyle = i % 3 === 0 ? "#FF9B2F" : "#7CF7B7";
+        ctx.fillRect(sx - 2, sy - 2, 4, 4);
+      }
+      ctx.restore();
+
+      // Clean target marker.
+      if (this.kinichSkillTarget && this.kinichSkillTarget.hp > 0) {
+        const target = this.kinichSkillTarget;
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.strokeStyle = "rgba(24,199,122,0.52)";
+        ctx.shadowColor = "#18C77A";
+        ctx.shadowBlur = 8;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5,5]);
+        ctx.beginPath();
+        ctx.arc(target.x, target.y, target.radius + 10 + Math.sin(Date.now() * 0.004) * 2, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+
+      // Keep the newer Claymore/Ajaw weapon and skill/ultimate visuals,
+      // but use the restored old Kinich palette around the character.
+      if(this.kinichAjawMode) drawKinichAjawWeapon(this.x,this.y,this.angle,this.isUltActive?1.25:0.92);
+      if(this.kinichSkillState === "aim") {
+        const target = this.kinichSkillTarget;
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.strokeStyle = "rgba(255,179,71,0.88)";
+        ctx.shadowColor = "#FFB347";
+        ctx.shadowBlur = 12;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5,5]);
+        if(target && target.hp > 0) {
+          ctx.beginPath();
+          ctx.moveTo(this.x,this.y);
+          ctx.lineTo(target.x,target.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.beginPath();
+          ctx.arc(target.x,target.y,target.radius+8,0,Math.PI*2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
     }
 
     if (this.name === "Divergent") {
@@ -2185,6 +2575,7 @@ class Ball {
       }
 
       segs.forEach((seg) => {
+        if (this.name === "Kinich") { drawKinichClaymore(seg,this); return; }
         if (this.name === "Juggernaut") {
           const dx = seg.p2.x - seg.p1.x, dy = seg.p2.y - seg.p1.y;
           const len = Math.hypot(dx, dy) || 1;
@@ -2335,6 +2726,25 @@ class Ball {
       ? (this.bloodchainBankai ? "#b11226" : "#ffffff")
       : this.color;
     ctx.stroke();
+    if (this.kinichMarkedBy && this.kinichMarkedBy.hp > 0 && this.kinichMarkedBy.team !== this.team) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      const p = 1 + Math.sin(Date.now() * 0.008) * 0.08;
+      ctx.translate(this.x, this.y);
+      ctx.scale(p, p);
+      ctx.strokeStyle = "rgba(24,199,122,0.85)";
+      ctx.shadowColor = "#18C77A";
+      ctx.shadowBlur = 9;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius + 9, 0.15, Math.PI * 1.85);
+      ctx.stroke();
+      ctx.fillStyle = "#FF9B2F";
+      ctx.fillRect(-3, -this.radius - 14, 6, 5);
+      ctx.restore();
+    }
+
     ctx.fillStyle = (this.name === "Death Note" || this.name === "Antimagic") ? "#ffffff" : "#000000";
     ctx.font = `bold ${this.isClone ? 12 : 20}px Arial`;
     ctx.textAlign = "center";
@@ -2599,7 +3009,7 @@ class Ball {
         }
       }
 
-      for (let i = soundTraps.length - 1; i >= 0; i--) {
+  for (let i = soundTraps.length - 1; i >= 0; i--) {
         let st = soundTraps[i];
         if (st.owner && st.owner.team !== this.team) {
           let hitBySword = false;
@@ -2826,6 +3236,149 @@ class Ball {
         }
       }
     }
+
+    if (this.name === "Kinich") {
+      if (this.kinichSkillCD > 0) this.kinichSkillCD--;
+      this.damage = characterDB["Kinich"].damage;
+
+      if (this.kinichChargeTimer > 0) {
+        this.kinichChargeTimer--;
+        this.vx = 0;
+        this.vy = 0;
+        if (this.kinichChargeTimer <= 0 && this.kinichChargeTarget && this.kinichChargeTarget.hp > 0) {
+          projectiles.push(new KinichProjectile(this.x, this.y, this.kinichChargeTarget, this, {
+            damageMultiplier: 1.7,
+            scale: 1.2,
+            speed: 8.5,
+            isCharged: true,
+            life: 170,
+          }));
+          effects.push({ type: "kinich_charge_fire", x: this.x, y: this.y, life: 22, maxLife: 22 });
+          spawnText("BIG SPIKER!", this.x, this.y - 28, "#8BAE66");
+          this.kinichChargeTarget = null;
+        }
+      }
+
+      if (this.kinichSkillState === "aim") {
+        this.vx = 0;
+        this.vy = 0;
+        this.kinichSkillAimTimer--;
+        if (this.kinichSkillAimTimer <= 0) {
+          const target = this.kinichSkillTarget;
+          if (target && target.hp > 0 && gameState === "playing") {
+            this.kinichSkillState = "grapple";
+            this.kinichAjawMode = true;
+            kinichSkills.push(new KinichGrapple(this, target));
+          } else {
+            this.cancelKinichSkill();
+          }
+        }
+      }
+
+      if (this.kinichSkillState === "field") {
+        this.vx = 0;
+        this.vy = 0;
+        const target = this.kinichSkillTarget;
+        if (target && target.hp > 0 && this.kinichAjawMode) {
+          if (this.kinichAttackCD > 0) this.kinichAttackCD--;
+          if (this.kinichAttackCD <= 0 && this.kinichChargeTimer <= 0) {
+            projectiles.push(new KinichProjectile(this.x, this.y, target, this, {
+              damageMultiplier: 0.55,
+              scale: 0.9,
+              speed: 9.2,
+              life: 150,
+            }));
+            this.kinichAttackCD = 34;
+          }
+        }
+      }
+
+      if (gameState === "playing" && this.kinichSkillState === "idle") {
+        const enemy = balls.find((b) => b.team !== this.team && b.hp > 0 && !b.isClone)
+          || balls.find((b) => b.team !== this.team && b.hp > 0);
+        if (enemy) {
+          this.kinichSkillTarget = enemy;
+          this.kinichMarkTarget = enemy;
+          this.angle = Math.atan2(enemy.y - this.y, enemy.x - this.x);
+          const dist = Math.hypot(enemy.x - this.x, enemy.y - this.y);
+          if (this.kinichSkillCD <= 0 && dist > 95) {
+            this.kinichSkillState = "aim";
+            this.kinichSkillAimTimer = 18;
+            this.vx = 0;
+            this.vy = 0;
+            this.kinichSkillCD = 1200;
+            effects.push({ type: "kinich_skill_cast", x: this.x, y: this.y, life: 20, maxLife: 20, target: enemy });
+            spawnText("CANOPY GRAPPLE!", this.x, this.y - 28, "#8BAE66");
+          }
+        }
+      }
+
+      if (this.isUltActive) {
+        // Kinich remains fully playable during BOOMSHAKALAKA: he can move,
+        // use his normal claymore attacks, and trigger Canopy Grapple.
+        const enemy = (this.kinichUltTarget && this.kinichUltTarget.hp > 0)
+          ? this.kinichUltTarget
+          : balls.find((b) => b.team !== this.team && b.hp > 0 && !b.isClone)
+            || balls.find((b) => b.team !== this.team && b.hp > 0);
+        if (enemy) this.kinichUltTarget = enemy;
+
+        if (this.kinichUltPhase === "windup") {
+          this.kinichUltTimer--;
+          this.bonusText = "BOOMSHAKALAKA: AJAW DESCENDS";
+          if (this.kinichUltTimer <= 0) {
+            this.kinichUltPhase = "barrage";
+            this.kinichUltTimer = 300;
+            this.kinichUltShots = 0;
+            effects.push({ type: "kinich_ult_summon", x: canvas.width * 0.5, y: 10, life: 72, maxLife: 72 });
+          }
+        } else if (this.kinichUltPhase === "barrage") {
+          this.bonusText = `BOOMSHAKALAKA: AJAW BARRAGE ${this.kinichUltShots}/20`;
+          this.kinichUltTimer--;
+          if (this.kinichUltShots < 20 && this.kinichUltTimer % 15 === 0 && enemy && enemy.hp > 0) {
+            projectiles.push(new KinichProjectile(canvas.width * 0.5, 8, enemy, this, {
+              damageMultiplier: 0.50,
+              scale: 1.05,
+              speed: 6.4,
+              isUlt: true,
+              homing: false,
+              life: 170,
+            }));
+            this.kinichUltShots++;
+          }
+          if (this.kinichUltShots >= 20) {
+            this.kinichUltPhase = "laserCharge";
+            this.kinichUltTimer = 90;
+            effects.push({ type: "kinich_ult_final_charge", x: canvas.width * 0.5, y: 14, life: 90, maxLife: 90, target: enemy });
+          }
+        } else if (this.kinichUltPhase === "laserCharge") {
+          this.bonusText = "BOOMSHAKALAKA: AJAW LASER CHARGING";
+          this.kinichUltTimer--;
+          if (this.kinichUltTimer <= 0) {
+            this.kinichUltPhase = "laser";
+            this.kinichUltTimer = 60;
+            const allEnemies = balls.filter((b) => b.team !== this.team && b.hp > 0);
+            kinichSkills.push(new KinichUltLaser(this, allEnemies));
+          }
+        } else if (this.kinichUltPhase === "laser") {
+          this.bonusText = "BOOMSHAKALAKA: AJAW LASER";
+          this.kinichUltTimer--;
+          if (this.kinichUltTimer <= 0) {
+            this.isUltActive = false;
+            this.kinichUltPhase = "none";
+            this.kinichUltTarget = null;
+            this.kinichUltFinalHit = false;
+            this.kinichUltShots = 0;
+            this.bonusText = "";
+            this.ultCharge = 0;
+            if (Math.hypot(this.vx, this.vy) < 0.25) {
+              const ang = Math.random() * Math.PI * 2;
+              this.vx = Math.cos(ang) * this.baseSpeed;
+              this.vy = Math.sin(ang) * this.baseSpeed;
+            }
+          }
+        }
+      }
+      }
 
     if (this.stunTimer > 0) {
       this.stunTimer--;
@@ -3110,7 +3663,8 @@ class Ball {
 
     let currentSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
     let targetSpeed = this.baseSpeed;
-    if (!this.isUltActive || (this.name !== "Brawler" && this.name !== "Illustrade" && this.name !== "Retaliator" && this.name !== "Antimagic")) {
+    if ((!this.isUltActive && !(this.name === "Kinich" && ["aim","grapple","field"].includes(this.kinichSkillState))) ||
+        (this.name !== "Brawler" && this.name !== "Illustrade" && this.name !== "Retaliator" && this.name !== "Antimagic")) {
       if (currentSpeed > targetSpeed) {
         this.vx *= 0.92;
         this.vy *= 0.92;
@@ -3172,6 +3726,8 @@ class Ball {
       triggerTyrantChainUlt(this);
     }
   }
+
+  cancelKinichSkill(){if(this.name!=="Kinich")return;if(this.kinichField&&this.kinichField.life>0)this.kinichField.life=0;this.kinichField=null;this.kinichSkillState="idle";this.kinichAjawMode=false;this.kinichChargeTimer=0;this.kinichChargeTarget=null;this.kinichSkillTarget=null;}
 
   refreshBloodchainDamage() {
     if (this.name !== "Bloodchain") return;
@@ -3290,7 +3846,20 @@ class Ball {
       this.bonusText = "3X ATK SPEED TIME STOP!";
       this.stasisUltTimer = 210;
     } else if (this.name === "Valkyrie") this.bonusText = "REGEN!";
-    else if (this.name === "Funeral") {
+    else if (this.name === "Kinich") {
+      this.bonusText="BOOMSHAKALAKA!";
+      this.kinichUltPhase="windup";
+      this.kinichUltTimer=100;
+      this.kinichUltShots=0;
+      this.kinichUltFinalHit=false;
+      this.kinichUltTarget=this.kinichMarkTarget&&this.kinichMarkTarget.hp>0?this.kinichMarkTarget:balls.find(b=>b.team!==this.team&&b.hp>0&&!b.isClone)||balls.find(b=>b.team!==this.team&&b.hp>0);
+      // Do not cancel an active Kinich Skill when BOOMSHAKALAKA starts.
+      // In particular, if Kinich is already orbiting inside the Nightsoul Field,
+      // the field/orbit must remain attached throughout the ultimate.
+      this.vx=0;this.vy=0;
+      kinichSkills.push(new KinichUltBoss(this));
+      effects.push({type:"kinich_ult_charge",x:canvas.width*0.5,y:10,life:100,maxLife:100});
+    } else if (this.name === "Funeral") {
       const critical = this.hp < 25;
       this.funeralUltMax = critical ? 1300 : 900;
       this.funeralUltCooldownMax = this.funeralUltMax;
@@ -3309,7 +3878,7 @@ class Ball {
       }
     }
 
-    if (this.name !== "Sword Saint" && this.name !== "Stasis" && this.name !== "Illustrade" && this.name !== "Infinity" && this.name !== "Echoes" && this.name !== "Funeral") {
+    if (this.name !== "Sword Saint" && this.name !== "Stasis" && this.name !== "Illustrade" && this.name !== "Infinity" && this.name !== "Echoes" && this.name !== "Funeral" && this.name !== "Kinich") {
       let ultDuration = this.name === "Brawler" ? 1000 : this.name === "Antimagic" ? 2000 : 5000;
       setTimeout(() => {
         this.isUltActive = false;
@@ -3502,6 +4071,11 @@ function applyFuneralBurn(attacker, target) {
     life: 20,
     maxLife: 20,
   });
+}
+
+function enemyDistanceForKinich(kinich) {
+  if (!kinich || !kinich.kinichMarkTarget || kinich.kinichMarkTarget.hp <= 0) return 9999;
+  return Math.hypot(kinich.kinichMarkTarget.x - kinich.x, kinich.kinichMarkTarget.y - kinich.y);
 }
 
 function spawnText(text, x, y, color) {
@@ -3909,6 +4483,180 @@ function getClosestPointOnSegment(p, v, w) {
   return { x: v.x + t * (w.x - v.x), y: v.y + t * (w.y - v.y) };
 }
 
+function drawKinichAjaw(x, y, scale = 1, rotation = 0) {
+  ctx.save();
+  ctx.translate(Math.round(x), Math.round(y));
+  ctx.rotate(rotation * 0.12);
+  ctx.scale(scale, scale);
+  ctx.imageSmoothingEnabled = false;
+  ctx.globalCompositeOperation = "lighter";
+  ctx.shadowColor = "#18C77A";
+  ctx.shadowBlur = 14;
+
+  // Small blocky green spirit silhouette with warm orange crest/tail accents.
+  ctx.fillStyle = "#0E5A4A";
+  ctx.fillRect(-15, -8, 30, 19);
+  ctx.fillStyle = "#18C77A";
+  ctx.fillRect(-12, -11, 24, 16);
+  ctx.fillRect(-18, -3, 8, 10);
+  ctx.fillRect(10, -3, 8, 10);
+
+  // Head + muzzle.
+  ctx.fillStyle = "#27E79A";
+  ctx.fillRect(-10, -20, 20, 12);
+  ctx.fillRect(3, -14, 12, 7);
+  ctx.fillStyle = "#073B35";
+  ctx.fillRect(2, -17, 3, 4);
+  ctx.fillRect(10, -17, 3, 4);
+
+  // Orange fins/horns.
+  ctx.fillStyle = "#FF9B2F";
+  ctx.fillRect(-13, -25, 5, 8);
+  ctx.fillRect(8, -25, 5, 8);
+  ctx.fillRect(14, -6, 9, 4);
+  ctx.fillRect(-22, 5, 8, 4);
+
+  // Pixel tail.
+  ctx.fillStyle = "#0AAE91";
+  ctx.fillRect(-12, 9, 7, 8);
+  ctx.fillRect(-19, 14, 7, 5);
+  ctx.fillStyle = "#FF9B2F";
+  ctx.fillRect(-25, 17, 6, 4);
+
+  ctx.restore();
+}
+
+function drawKinichClaymore(seg,owner){
+  const dx=seg.p2.x-seg.p1.x,dy=seg.p2.y-seg.p1.y,len=Math.hypot(dx,dy)||1;
+  const ux=dx/len,uy=dy/len,px=-uy,py=ux;
+  const handleEnd={x:seg.p1.x+ux*18,y:seg.p1.y+uy*18};
+  const guardBase={x:seg.p2.x-ux*30,y:seg.p2.y-uy*30};
+  const tip={x:seg.p2.x+ux*18,y:seg.p2.y+uy*18};
+  ctx.save();
+  ctx.imageSmoothingEnabled=false;
+
+  // Handle / grip.
+  ctx.strokeStyle="#3D2B26";ctx.lineWidth=7;ctx.lineCap="square";
+  ctx.beginPath();ctx.moveTo(seg.p1.x,seg.p1.y);ctx.lineTo(handleEnd.x,handleEnd.y);ctx.stroke();
+  ctx.strokeStyle="#8BAE66";ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(seg.p1.x,seg.p1.y);ctx.lineTo(handleEnd.x,handleEnd.y);ctx.stroke();
+
+  // Broad angular claymore silhouette inspired by Fang of the Mountain King.
+  const back=guardBase;
+  const b1={x:back.x+px*15,y:back.y+py*15};
+  const b2={x:back.x-px*15,y:back.y-py*15};
+  const shoulder={x:seg.p2.x-ux*8,y:seg.p2.y-uy*8};
+  const s1={x:shoulder.x+px*12,y:shoulder.y+py*12};
+  const s2={x:shoulder.x-px*12,y:shoulder.y-py*12};
+
+  ctx.fillStyle="#203A34";
+  ctx.beginPath();ctx.moveTo(b1.x,b1.y);ctx.lineTo(s1.x,s1.y);ctx.lineTo(tip.x,tip.y);ctx.lineTo(s2.x,s2.y);ctx.lineTo(b2.x,b2.y);ctx.closePath();ctx.fill();
+
+  ctx.fillStyle="#52745A";
+  ctx.beginPath();
+  ctx.moveTo(b1.x+ux*2,b1.y+uy*2);
+  ctx.lineTo(s1.x-ux*2,s1.y-uy*2);
+  ctx.lineTo(tip.x-ux*6,tip.y-uy*6);
+  ctx.lineTo(s2.x-ux*2,s2.y-uy*2);
+  ctx.lineTo(b2.x+ux*2,b2.y+uy*2);
+  ctx.closePath();ctx.fill();
+
+  // Pale inner blade plane.
+  const ib1={x:back.x+px*7+ux*5,y:back.y+py*7+uy*5};
+  const ib2={x:back.x-px*7+ux*5,y:back.y-py*7+uy*5};
+  ctx.fillStyle="#8BAE66";
+  ctx.beginPath();ctx.moveTo(ib1.x,ib1.y);ctx.lineTo(s1.x-ux*6,s1.y-uy*6);ctx.lineTo(tip.x-ux*8,tip.y-uy*8);ctx.lineTo(s2.x-ux*6,s2.y-uy*6);ctx.lineTo(ib2.x,ib2.y);ctx.closePath();ctx.fill();
+
+  // Geometric gold motif near the lower blade.
+  const mx=back.x+ux*8,my=back.y+uy*8;
+  ctx.fillStyle="#C49A4A";ctx.fillRect(Math.round(mx+px*6-3),Math.round(my+py*6-3),6,6);
+  ctx.fillRect(Math.round(mx-px*6-2),Math.round(my-py*6-2),4,4);
+  ctx.fillRect(Math.round(mx+ux*8-2),Math.round(my+uy*8-2),4,4);
+
+  // Small pale-green square motif closer to the spine.
+  ctx.fillStyle="#D4C98E";
+  ctx.fillRect(Math.round(back.x+ux*14-3),Math.round(back.y+uy*14-3),6,6);
+  ctx.fillStyle="#203A34";
+  ctx.fillRect(Math.round(back.x+ux*14-1),Math.round(back.y+uy*14-1),2,2);
+
+  // Angular guard / ornament.
+  ctx.fillStyle="#203A34";
+  ctx.beginPath();ctx.moveTo(back.x+px*17,back.y+py*17);ctx.lineTo(back.x+ux*11+px*7,back.y+uy*11+py*7);ctx.lineTo(back.x+ux*11-px*7,back.y+uy*11-py*7);ctx.lineTo(back.x-px*17,back.y-py*17);ctx.closePath();ctx.fill();
+  ctx.fillStyle="#52745A";
+  ctx.fillRect(Math.round(back.x-ux*2-3),Math.round(back.y-uy*2-4),6,8);
+  ctx.restore();
+}
+
+function drawKinichAjawWeapon(x,y,angle,scale=1){
+  // Ajaw-form weapon: a compact side-facing pixel beast replacing the claymore.
+  ctx.save();
+  ctx.translate(Math.round(x),Math.round(y));
+  ctx.rotate(angle);
+  ctx.scale(scale,scale);
+  ctx.imageSmoothingEnabled=false;
+
+  const outline="#203A34", deep="#355B50", body="#5F8B62", light="#8BAE66", gold="#C49A4A", pale="#D4C98E";
+
+  // Tail / rear.
+  ctx.fillStyle=outline;
+  ctx.fillRect(-34,-5,16,10);ctx.fillRect(-45,-3,12,6);ctx.fillRect(-52,1,9,5);
+  ctx.fillStyle=deep;
+  ctx.fillRect(-32,-3,14,6);ctx.fillRect(-43,-1,9,4);
+
+  // Main body.
+  ctx.fillStyle=outline;ctx.fillRect(-24,-14,34,28);
+  ctx.fillStyle=body;ctx.fillRect(-20,-11,28,22);
+  ctx.fillStyle=light;ctx.fillRect(-13,-9,16,8);ctx.fillRect(-8,0,16,7);
+
+  // Head / muzzle.
+  ctx.fillStyle=outline;ctx.fillRect(5,-16,26,25);ctx.fillRect(23,-8,14,14);
+  ctx.fillStyle=body;ctx.fillRect(8,-13,20,18);ctx.fillRect(27,-6,9,9);
+  ctx.fillStyle=light;ctx.fillRect(10,-10,12,7);
+
+  // Eyes and angular mouth.
+  ctx.fillStyle="#26352E";ctx.fillRect(17,-9,4,4);ctx.fillRect(25,-9,4,4);
+  ctx.fillStyle=gold;ctx.fillRect(28,1,7,3);
+  ctx.fillStyle=pale;ctx.fillRect(13,5,13,3);
+
+  // Crest / horns.
+  ctx.fillStyle=gold;ctx.fillRect(4,-22,7,8);ctx.fillRect(24,-21,7,8);
+  ctx.fillStyle=deep;ctx.fillRect(7,-25,3,5);ctx.fillRect(27,-24,3,5);
+
+  // Lower fins / feet.
+  ctx.fillStyle=deep;ctx.fillRect(-11,11,8,8);ctx.fillRect(7,11,9,7);
+  ctx.fillStyle=gold;ctx.fillRect(13,12,5,4);
+  ctx.restore();
+}
+
+function drawKinichAjaw(x,y,scale=1,rotation=0){
+  ctx.save();
+  ctx.translate(Math.round(x),Math.round(y));
+  ctx.rotate(rotation*0.10);
+  ctx.scale(scale,scale);
+  ctx.imageSmoothingEnabled=false;
+  const outline="#203A34", deep="#355B50", body="#5F8B62", light="#8BAE66", gold="#C49A4A", pale="#D4C98E";
+
+  // Blocky Ajaw body.
+  ctx.fillStyle=outline;ctx.fillRect(-34,-20,58,40);
+  ctx.fillRect(-22,-34,40,18);ctx.fillRect(18,-11,24,19);ctx.fillRect(-18,18,28,17);
+  ctx.fillStyle=body;ctx.fillRect(-28,-15,48,30);ctx.fillRect(-17,-27,30,16);ctx.fillRect(19,-7,17,11);
+  ctx.fillStyle=light;ctx.fillRect(-11,-25,18,10);ctx.fillRect(0,-13,17,9);ctx.fillRect(-7,2,19,9);
+
+  // Face.
+  ctx.fillStyle="#26352E";ctx.fillRect(2,-18,5,7);ctx.fillRect(13,-18,5,7);
+  ctx.fillStyle=pale;ctx.fillRect(7,-4,15,4);
+  ctx.fillStyle=gold;ctx.fillRect(20,-10,10,4);
+
+  // Crest and side fins.
+  ctx.fillStyle=gold;ctx.fillRect(-18,-35,7,10);ctx.fillRect(9,-35,7,10);ctx.fillRect(27,-12,10,5);
+  ctx.fillStyle=deep;ctx.fillRect(-33,5,12,12);ctx.fillRect(-44,10,11,7);
+  ctx.fillStyle=gold;ctx.fillRect(-51,14,8,5);
+
+  // Tail.
+  ctx.fillStyle=deep;ctx.fillRect(-13,12,8,9);ctx.fillRect(-21,18,8,7);ctx.fillStyle=gold;ctx.fillRect(-28,22,7,5);
+  ctx.restore();
+}
+
 function getCharSpecificStats(p) {
   let lines = [];
   lines.push(`HP: ${Math.max(0, Math.floor(p.hp))}/${p.maxHp}`);
@@ -3940,6 +4688,17 @@ function getCharSpecificStats(p) {
       lines.push(`Mugen: ${p.mugenCD <= 0 ? "READY" : Math.ceil(p.mugenCD / 60) + "s"}`);
       if (p.isUltActive) lines.push(`Unlimited Void: ACTIVE`);
       else lines.push(`Blue: ${Math.ceil(p.blueCD / 60)}s | Red: ${Math.ceil(p.redCD / 60)}s | Purp: ${Math.ceil(p.purpleCD / 60)}s`);
+      break;
+    case "Kinich":
+      lines.push(`Claymore Dmg: ${p.damage.toFixed(1)}`);
+      lines.push(`Skill: ${p.kinichSkillCD <= 0 ? "READY" : (p.kinichSkillCD / 60).toFixed(1) + "s"}`);
+      lines.push(`Mode: ${p.kinichAjawMode ? "AJAW FIELD" : "CLAYMORE"}`);
+      lines.push(`Field: ${p.kinichField ? Math.ceil(p.kinichField.life / 60) + "s" : "-"}`);
+      if (p.kinichChargeTimer > 0) lines.push(`Spiker: CHARGING`);
+      if (p.isUltActive) {
+        const phaseLabel = p.kinichUltPhase === "windup" ? "AJAW DESCENDS" : p.kinichUltPhase === "barrage" ? `AJAW BARRAGE ${p.kinichUltShots}/20` : p.kinichUltPhase === "laserCharge" ? "LASER CHARGING" : "AJAW LASER";
+        lines.push(`Ult: ${phaseLabel}`);
+      }
       break;
     case "Divergent":
       lines.push(`Dmg: ${p.damage.toFixed(1)}`);
@@ -4011,8 +4770,10 @@ function getCharSpecificStats(p) {
     default:
       lines.push(`Dmg: ${p.damage.toFixed(2)}`);
   }
-  if (p.bonusText && p.name !== "Death Note")
-    lines.push(`<span style="color:#00d2d3; font-weight:bold">${p.bonusText}</span>`);
+  if (p.bonusText && p.name !== "Death Note") {
+    const bonusColor = p.name === "Kinich" ? "#8BAE66" : "#00d2d3";
+    lines.push(`<span style="color:${bonusColor}; font-weight:bold">${p.bonusText}</span>`);
+  }
   return lines.join("<br>");
 }
 
@@ -4092,6 +4853,12 @@ function gameLoop() {
   } else if (gameState === "playing") {
     balls.forEach((b) => b.update());
     checkPhysicsAndHits();
+  }
+
+  for (let i = kinichSkills.length - 1; i >= 0; i--) {
+    if (gameState === "playing") kinichSkills[i].update();
+    kinichSkills[i].draw();
+    if (kinichSkills[i].life <= 0) kinichSkills.splice(i, 1);
   }
 
   for (let i = scatteredSwords.length - 1; i >= 0; i--) {
@@ -4796,6 +5563,16 @@ function gameLoop() {
       ctx.lineWidth = 4;
       ctx.stroke();
       ef.life--;
+    } else if (ef.type === "kinich_skill_cast") {const t=1-ef.life/ef.maxLife;ctx.save();ctx.globalCompositeOperation="lighter";ctx.globalAlpha=1-t;ctx.strokeStyle="#5F8B62";ctx.shadowColor="#5F8B62";ctx.shadowBlur=0;ctx.lineWidth=3;ctx.setLineDash([5,5]);ctx.beginPath();ctx.arc(ef.x,ef.y,18+t*18,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);ctx.restore();ef.life--;
+    } else if (ef.type === "kinich_charge_start") {const t=1-ef.life/ef.maxLife;ctx.save();ctx.globalCompositeOperation="lighter";ctx.translate(ef.x,ef.y);ctx.rotate(t*3);ctx.strokeStyle="#C49A4A";ctx.shadowColor="#C49A4A";ctx.shadowBlur=0;ctx.lineWidth=3;ctx.beginPath();ctx.arc(0,0,16+t*30,0,Math.PI*1.7);ctx.stroke();ctx.restore();ef.life--;
+    } else if (ef.type === "kinich_charge_fire") {const t=1-ef.life/ef.maxLife;ctx.save();ctx.globalCompositeOperation="lighter";ctx.globalAlpha=1-t;ctx.strokeStyle="#C49A4A";ctx.shadowColor="#C49A4A";ctx.shadowBlur=0;ctx.lineWidth=5;ctx.strokeRect(ef.x-18,ef.y-18,36,36);ctx.strokeStyle="#8BAE66";ctx.lineWidth=2;ctx.strokeRect(ef.x-11,ef.y-11,22,22);ctx.restore();ef.life--;
+    } else if (ef.type === "kinich_ult_charge") {const t=1-ef.life/ef.maxLife;ctx.save();ctx.globalCompositeOperation="lighter";ctx.globalAlpha=.95*(ef.life/ef.maxLife);const r=18+t*60;ctx.strokeStyle="#5F8B62";ctx.shadowColor="#5F8B62";ctx.shadowBlur=0;ctx.lineWidth=6;ctx.beginPath();ctx.arc(ef.x,ef.y,r,0,Math.PI*2);ctx.stroke();ctx.strokeStyle="#FFB347";ctx.lineWidth=3;ctx.beginPath();ctx.arc(ef.x,ef.y,r*.62,t*2,t*2+Math.PI*1.5);ctx.stroke();ctx.restore();ef.life--;
+    } else if (ef.type === "kinich_ult_summon") {const t=1-ef.life/ef.maxLife;ctx.save();ctx.globalCompositeOperation="lighter";ctx.globalAlpha=(1-t)*.9;ctx.strokeStyle="#8BAE66";ctx.shadowColor="#5F8B62";ctx.shadowBlur=0;ctx.lineWidth=4;ctx.beginPath();ctx.arc(ef.x,ef.y,24+t*68,0,Math.PI*2);ctx.stroke();ctx.restore();ef.life--;
+    } else if (ef.type === "kinich_ult_final_charge") {const t=1-ef.life/ef.maxLife,tx=ef.target&&ef.target.hp>0?ef.target.x:ef.x,ty=ef.target&&ef.target.hp>0?ef.target.y:ef.y;ctx.save();ctx.globalCompositeOperation="lighter";ctx.strokeStyle="#C49A4A";ctx.shadowColor="#C49A4A";ctx.shadowBlur=0;ctx.lineWidth=5;ctx.beginPath();ctx.arc(tx,ty,20+t*45,0,Math.PI*2);ctx.stroke();ctx.restore();ef.life--;
+    } else if (ef.type === "kinich_ult_shot_impact") {const t=1-ef.life/ef.maxLife;ctx.save();ctx.globalCompositeOperation="lighter";ctx.globalAlpha=1-t;ctx.strokeStyle="#8BAE66";ctx.shadowColor="#5F8B62";ctx.shadowBlur=0;ctx.lineWidth=3;ctx.beginPath();ctx.arc(ef.x,ef.y,10+t*26,0,Math.PI*2);ctx.stroke();ctx.restore();ef.life--;
+    } else if (ef.type === "kinich_ult_final_impact") {const t=1-ef.life/ef.maxLife;ctx.save();ctx.globalCompositeOperation="lighter";ctx.globalAlpha=1-t;ctx.strokeStyle="#C49A4A";ctx.shadowColor="#C49A4A";ctx.shadowBlur=0;ctx.lineWidth=8;ctx.beginPath();ctx.arc(ef.x,ef.y,18+t*82,0,Math.PI*2);ctx.stroke();ctx.strokeStyle="#8BAE66";ctx.lineWidth=3;ctx.beginPath();ctx.arc(ef.x,ef.y,10+t*48,0,Math.PI*2);ctx.stroke();ctx.restore();ef.life--;
+    } else if (ef.type === "kinich_spiker_hit") {const t=1-ef.life/ef.maxLife;ctx.save();ctx.globalCompositeOperation="lighter";ctx.fillStyle=ef.big?"rgba(196,154,74,.18)":"rgba(95,139,98,.18)";ctx.shadowColor=ef.big?"#C49A4A":"#5F8B62";ctx.shadowBlur=0;ctx.beginPath();ctx.arc(ef.x,ef.y,(ef.big?18:10)+t*(ef.big?46:28),0,Math.PI*2);ctx.fill();ctx.restore();ef.life--;
+    } else if (ef.type === "kinich_grapple_hit") {const t=1-ef.life/ef.maxLife;ctx.save();ctx.globalCompositeOperation="lighter";ctx.strokeStyle="#5F8B62";ctx.shadowColor="#5F8B62";ctx.shadowBlur=0;ctx.lineWidth=4;ctx.beginPath();ctx.arc(ef.x,ef.y,8+t*30,0,Math.PI*2);ctx.stroke();ctx.restore();ef.life--;
     } else if (ef.type === "heart_refuse") {
       ctx.save();
       let progress = 1 - ef.life / ef.maxLife;
@@ -4885,6 +5662,7 @@ function resetToMenu() {
     roster.scrollTop = 0;
   });
   projectiles = [];
+  kinichSkills = [];
   bloodchainSkills = [];
   infinitySkills = [];
   soundTraps = [];
@@ -4909,7 +5687,8 @@ function drawThumbnail(canvasEl, charName) {
   tCtx.strokeStyle = stats.color;
   tCtx.stroke();
 
-  if (stats.weapons > 0) {
+  if (charName === "Kinich") { tCtx.save(); tCtx.globalCompositeOperation="source-over"; tCtx.strokeStyle="rgba(95,139,98,.78)"; tCtx.lineWidth=2; tCtx.beginPath(); tCtx.arc(w/2,h/2,w*.40,0,Math.PI*2); tCtx.stroke(); tCtx.translate(w/2,h/2); tCtx.rotate(.45); tCtx.imageSmoothingEnabled=false; tCtx.fillStyle="#203A34"; tCtx.fillRect(-14,-5,28,10); tCtx.fillStyle="#5F8B62"; tCtx.fillRect(-10,-3,22,6); tCtx.fillStyle="#C49A4A"; tCtx.fillRect(7,-2,4,4); tCtx.restore();
+  } else if (stats.weapons > 0) {
     const ang = 0.4;
     const cx = w / 2, cy = h / 2;
     const ex = cx + Math.cos(ang) * (w * 0.42);
@@ -5016,6 +5795,7 @@ function setupGame() {
 
   balls = [];
   projectiles = [];
+  kinichSkills = [];
   bloodchainSkills = [];
   infinitySkills = [];
   soundTraps = [];
