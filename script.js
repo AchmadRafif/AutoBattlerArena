@@ -31,7 +31,7 @@ const characterDB = {
     ultName: "BANKAI: BLOOD CHAIN",
     ultColor: "#b11226",
     desc: "Permanent Bankai",
-    ultMax: 10000,
+    ultMax: 7000,
   },
   Copycat: {
     color: "#ffffff",
@@ -269,7 +269,7 @@ const characterDB = {
     ultName: "BOOMSHAKALAKA",
     ultColor: "#8BAE66",
     desc: "Claymore, Canopy Grapple, Nightsoul Field & Ajaw",
-    ultMax: 2500,
+    ultMax: 3500,
   },
   "Funeral": {
     color: "#8f1725",
@@ -284,6 +284,20 @@ const characterDB = {
     ultColor: "#8f1725",
     desc: "Wangsheng Funeral Parlor",
     ultMax: 900,
+  },
+  Adeptus: {
+    color: "#8FD3FF",
+    hp: 100,
+    damage: 1.0,
+    speed: 2.35,
+    weapons: 0,
+    wLen: 0,
+    wWidth: 0,
+    rotSpeed: 0.018,
+    ultName: "CELESTIAL SHOWER",
+    ultColor: "#7CCBFF",
+    desc: "Frostflake Bow, Ice Lotus & Cryo Rain",
+    ultMax: 2700,
   },
 };
 
@@ -432,6 +446,7 @@ let p2Choice = "Infinity";
 let effects = [];
 let infinitySkills = [];
 let kinichSkills = [];
+let adeptusSkills = [];
 let soundTraps = [];
 let scatteredSwords = [];
 let killerQueenSkills = [];
@@ -766,6 +781,474 @@ class RedWave {
 }
 
 
+// ================= ADEPTUS =================
+// Ganyu-inspired long-range kit. Adeptus uses dedicated skills so her bow,
+// Ice Lotus, Frostflake charges, and Celestial Shower remain visually distinct.
+function getAdeptusTarget(owner, includeClones = false) {
+  const enemies = balls.filter((b) =>
+    b !== owner && b.team !== owner.team && b.hp > 0 && (includeClones || !b.isClone)
+  );
+  return enemies[0] || balls.find((b) => b !== owner && b.team !== owner.team && b.hp > 0) || null;
+}
+
+class AdeptusArrow {
+  constructor(x, y, target, owner, options = {}) {
+    this.x = x;
+    this.y = y;
+    this.owner = owner;
+    this.target = target || null;
+    this.targetX = options.targetX ?? (target ? target.x : x + 1);
+    this.targetY = options.targetY ?? (target ? target.y : y);
+    this.speed = options.speed ?? 12;
+    this.life = options.life ?? 180;
+    this.damageMultiplier = options.damageMultiplier ?? 0.7;
+    this.isStage1 = !!options.isStage1;
+    this.isFrostflake = !!options.isFrostflake;
+    this.chargeBonus = options.chargeBonus ?? 1;
+    this.radius = options.radius ?? (this.isFrostflake ? 13 : 7);
+    this.hit = false;
+    this.angle = Math.atan2(this.targetY - y, this.targetX - x);
+    this.vx = Math.cos(this.angle) * this.speed;
+    this.vy = Math.sin(this.angle) * this.speed;
+  }
+
+  update() {
+    if (!this.owner || this.owner.hp <= 0) {
+      this.life = 0;
+      return;
+    }
+
+    // Adeptus projectiles are straight-shot: lock the firing direction at cast time.
+    // They never retarget or home after being released, like a thrown kunai.
+
+    this.x += this.vx;
+    this.y += this.vy;
+    this.life--;
+
+    // Frostflake still blooms when it strikes the arena wall.
+    // This is a miss for Undivided Heart purposes, but the Bloom AoE still triggers
+    // exactly at the impact point so the charged shot never feels wasted against a wall.
+    if (!this.hit && this.isFrostflake && (
+      this.x - this.radius <= 0 ||
+      this.x + this.radius >= canvas.width ||
+      this.y - this.radius <= 0 ||
+      this.y + this.radius >= canvas.height
+    )) {
+      this.x = Math.max(this.radius, Math.min(canvas.width - this.radius, this.x));
+      this.y = Math.max(this.radius, Math.min(canvas.height - this.radius, this.y));
+
+      for (const splash of balls) {
+        if (splash === this.owner || splash.team === this.owner.team || splash.hp <= 0) continue;
+        const sd = Math.hypot(splash.x - this.x, splash.y - this.y);
+        if (sd <= 56 + splash.radius) {
+          const splashDmg = this.owner.damage * 1.5 * this.chargeBonus * (this.owner.adeptusUltDamageMultiplier || 1);
+          const splashDealt = splash.takeDamage(splashDmg, this.owner, true);
+          spawnText("FROST BLOOM -" + splashDealt.toFixed(1), splash.x, splash.y - 18, "#BFEAFF");
+        }
+      }
+
+      effects.push({ type: "adeptus_frostflake_hit", x: this.x, y: this.y, life: 28, maxLife: 28, radius: 56 });
+      this.hit = true;
+      this.life = 0;
+      return;
+    }
+
+    if (!this.hit) {
+      for (const b of balls) {
+        if (b === this.owner || b.team === this.owner.team || b.hp <= 0) continue;
+        const d = Math.hypot(b.x - this.x, b.y - this.y);
+        if (d <= b.radius + this.radius) {
+          this.hit = true;
+          const dmg = this.owner.damage * this.damageMultiplier * (this.isFrostflake ? this.chargeBonus : 1) * (this.owner.adeptusUltDamageMultiplier || 1);
+          const dealt = b.takeDamage(dmg, this.owner, true);
+          const label = this.isFrostflake ? "FROSTFLAKE" : this.isStage1 ? "CHARGE" : "ARROW";
+          spawnText(label + " -" + dealt.toFixed(1), b.x, b.y - 18, "#7CCBFF");
+
+          if (this.isFrostflake) {
+            // Main target receives the Stage 2 hit. Nearby enemies receive the
+            // separate Frostflake bloom AoE, excluding the primary target.
+            for (const splash of balls) {
+              if (splash === b || splash === this.owner || splash.team === this.owner.team || splash.hp <= 0) continue;
+              const sd = Math.hypot(splash.x - b.x, splash.y - b.y);
+              if (sd <= 56 + splash.radius) {
+                const splashDmg = this.owner.damage * 1.5 * this.chargeBonus * (this.owner.adeptusUltDamageMultiplier || 1);
+                const splashDealt = splash.takeDamage(splashDmg, this.owner, true);
+                spawnText("FROST BLOOM -" + splashDealt.toFixed(1), splash.x, splash.y - 18, "#BFEAFF");
+              }
+            }
+            this.owner.adeptusRegisterStage2Hit?.(b);
+            effects.push({ type: "adeptus_frostflake_hit", x: b.x, y: b.y, life: 28, maxLife: 28, radius: 56 });
+          } else {
+            effects.push({ type: "adeptus_arrow_hit", x: b.x, y: b.y, life: 16, maxLife: 16 });
+          }
+          this.life = 0;
+          return;
+        }
+      }
+    }
+
+    if (this.life <= 0) {
+      if (this.isFrostflake && !this.hit) this.owner.adeptusRegisterStage2Miss?.();
+      return;
+    }
+
+    if (this.x < -80 || this.x > canvas.width + 80 || this.y < -80 || this.y > canvas.height + 80) {
+      if (this.isFrostflake && !this.hit) this.owner.adeptusRegisterStage2Miss?.();
+      this.life = 0;
+    }
+  }
+
+  draw() {
+    const pulse = 1 + Math.sin(Date.now() * 0.015) * 0.08;
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+    ctx.globalCompositeOperation = "lighter";
+    ctx.shadowColor = this.isFrostflake ? "#AEE4FF" : "#7CCBFF";
+    ctx.shadowBlur = this.isFrostflake ? 18 : 9;
+
+    if (this.isFrostflake) {
+      ctx.fillStyle = "#E8FAFF";
+      ctx.beginPath();
+      ctx.moveTo(13 * pulse, 0);
+      ctx.lineTo(1, -7 * pulse);
+      ctx.lineTo(-10, -4);
+      ctx.lineTo(-4, 0);
+      ctx.lineTo(-10, 4);
+      ctx.lineTo(1, 7 * pulse);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "#7CCBFF";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(255,255,255,.9)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-7, 0); ctx.lineTo(10, 0);
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = this.isStage1 ? "#BFEAFF" : "#E8FAFF";
+      ctx.lineWidth = this.isStage1 ? 3.2 : 2.2;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(-9, 0);
+      ctx.lineTo(12, 0);
+      ctx.stroke();
+      ctx.strokeStyle = "#6EBEFF";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(-12, 0);
+      ctx.lineTo(8, 0);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+class AdeptusLotus {
+  constructor(x, y, owner) {
+    this.x = x;
+    this.y = y;
+    this.owner = owner;
+    this.team = owner.team;
+    this.name = "Ice Lotus";
+    this.isClone = false;
+    this.isAdeptusLotus = true;
+    this.life = 220; // ~3.7 seconds
+    this.maxHp = 35;
+    this.hp = this.maxHp;
+    this.radius = 22;
+    this.pullRadius = 120;
+    this.exploded = false;
+    this.vx = 0;
+    this.vy = 0;
+    this.iFrames = 0;
+  }
+
+  takeDamage(amount, attacker = null, isProjectile = false) {
+    if (this.hp <= 0 || this.exploded) return 0;
+    if (this.iFrames > 0) return 0;
+    const actualDamage = Math.max(0, amount);
+    this.hp -= actualDamage;
+    this.iFrames = isProjectile ? 8 : 12;
+    spawnText("ICE LOTUS -" + actualDamage.toFixed(1), this.x, this.y - 24, "#8FD3FF");
+    effects.push({ type: "adeptus_lotus_hit", x: this.x, y: this.y, life: 12, maxLife: 12 });
+    if (this.hp <= 0) this.explode();
+    return actualDamage;
+  }
+
+  explode() {
+    if (this.exploded) return;
+    this.exploded = true;
+    for (const b of balls) {
+      if (b.isAdeptusLotus || b.team === this.owner.team || b.hp <= 0) continue;
+      const d = Math.hypot(b.x - this.x, b.y - this.y);
+      if (d <= 88 + b.radius) {
+        const dmg = b.takeDamage(this.owner.damage * 2.0 * (this.owner.adeptusUltDamageMultiplier || 1), this.owner);
+        b.adeptusSlowTimer = Math.max(b.adeptusSlowTimer || 0, 110);
+        b.adeptusSlowFactor = Math.min(b.adeptusSlowFactor || 1, 0.55);
+        spawnText("ICE LOTUS -" + dmg.toFixed(1), b.x, b.y - 22, "#8FD3FF");
+      }
+    }
+    effects.push({ type: "adeptus_lotus_explode", x: this.x, y: this.y, life: 32, maxLife: 32 });
+    this.life = 0;
+    this.hp = 0;
+    if (this.owner && this.owner.adeptusLotus === this) this.owner.adeptusLotus = null;
+  }
+
+  update() {
+    if (!this.owner || this.owner.hp <= 0) {
+      this.life = 0;
+      this.hp = 0;
+      if (this.owner && this.owner.adeptusLotus === this) this.owner.adeptusLotus = null;
+      return;
+    }
+    if (this.iFrames > 0) this.iFrames--;
+    this.life--;
+
+    for (const b of balls) {
+      if (b.team === this.owner.team || b.hp <= 0) continue;
+      const dx = this.x - b.x;
+      const dy = this.y - b.y;
+      const d = Math.hypot(dx, dy) || 1;
+      if (d <= this.pullRadius + b.radius) {
+        // Taunt-like lure: opponents are softly pulled toward the Lotus and slowed.
+        // The Lotus itself is also prioritized by the game's target selectors.
+        // Only enemies inside this 120px area feel its lure.
+        b.vx += (dx / d) * 0.30;
+        b.vy += (dy / d) * 0.30;
+        b.adeptusSlowTimer = Math.max(b.adeptusSlowTimer || 0, 10);
+        b.adeptusSlowFactor = Math.min(b.adeptusSlowFactor || 1, d < 52 ? 0.62 : 0.78);
+      }
+    }
+
+    if (this.life <= 0) this.explode();
+  }
+
+  draw() {
+    const t = Date.now() * 0.002;
+    const pulse = 1 + Math.sin(t * 2) * 0.08;
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.globalCompositeOperation = "lighter";
+    ctx.shadowColor = "#7CCBFF";
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = "rgba(143,211,255,.13)";
+    ctx.beginPath();
+    ctx.arc(0, 0, (this.pullRadius * 0.54) * pulse, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(124,203,255,.55)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 7]);
+    ctx.beginPath(); ctx.arc(0, 0, this.pullRadius * 0.54, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Pixel lotus petals.
+    for (let i = 0; i < 8; i++) {
+      const a = t * 0.4 + i * Math.PI / 4;
+      const px = Math.cos(a) * 17;
+      const py = Math.sin(a) * 17;
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(a + Math.PI / 2);
+      ctx.fillStyle = i % 2 ? "#BFEAFF" : "#7CCBFF";
+      ctx.beginPath();
+      ctx.moveTo(0, -11);
+      ctx.lineTo(5, -2);
+      ctx.lineTo(0, 4);
+      ctx.lineTo(-5, -2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.fillStyle = "#F4FCFF";
+    ctx.fillRect(-5, -5, 10, 10);
+    ctx.restore();
+  }
+}
+
+class AdeptusIcicle {
+  constructor(x, y, owner, options = {}) {
+    this.x = x;
+    this.y = y;
+    this.owner = owner;
+    this.delay = options.delay ?? 10;
+    this.life = options.life ?? 18;
+    this.isFinal = !!options.isFinal;
+    this.radius = this.isFinal ? 92 : 34;
+    this.damageMultiplier = this.isFinal ? 2.0 : 0.5;
+    this.impacted = false;
+    this.angle = -Math.PI / 2 + (Math.random() - 0.5) * 0.18;
+  }
+
+  impact() {
+    if (this.impacted || !this.owner || this.owner.hp <= 0) return;
+    this.impacted = true;
+
+    for (const b of balls) {
+      if (b.team === this.owner.team || b.hp <= 0) continue;
+      const d = Math.hypot(b.x - this.x, b.y - this.y);
+      if (d <= this.radius + b.radius) {
+        const dmg = b.takeDamage(this.owner.damage * this.damageMultiplier * (this.owner.adeptusUltDamageMultiplier || 1), this.owner, true);
+        b.adeptusCryoMark = { owner: this.owner, life: this.isFinal ? 180 : 110 };
+        b.adeptusSlowTimer = Math.max(b.adeptusSlowTimer || 0, this.isFinal ? 180 : 110);
+        b.adeptusSlowFactor = Math.min(b.adeptusSlowFactor || 1, this.isFinal ? 0.72 : 0.82);
+        spawnText((this.isFinal ? "CELESTIAL FALL" : "CRYO") + " -" + dmg.toFixed(1), b.x, b.y - 22, "#BFEAFF");
+      }
+    }
+    effects.push({ type: "adeptus_icicle_hit", x: this.x, y: this.y, life: this.isFinal ? 42 : 22, maxLife: this.isFinal ? 42 : 22, radius: this.radius, final: this.isFinal });
+  }
+
+  update() {
+    if (!this.owner || this.owner.hp <= 0) {
+      this.life = 0;
+      return;
+    }
+    if (this.delay > 0) this.delay--;
+    else if (!this.impacted) this.impact();
+    this.life--;
+  }
+
+  draw() {
+    const falling = this.delay > 0;
+    const alpha = falling ? 0.35 + (1 - this.delay / 10) * 0.5 : Math.max(0, this.life / (this.isFinal ? 42 : 18));
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = Math.min(1, alpha);
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+    ctx.shadowColor = this.isFinal ? "#DFF7FF" : "#8FD3FF";
+    ctx.shadowBlur = this.isFinal ? 26 : 14;
+
+    if (falling) {
+      ctx.strokeStyle = "rgba(191,234,255,.75)";
+      ctx.lineWidth = this.isFinal ? 5 : 2.5;
+      ctx.beginPath();
+      ctx.moveTo(0, -90);
+      ctx.lineTo(0, -16);
+      ctx.stroke();
+    }
+
+    const scale = this.isFinal ? 1.6 : 1;
+    ctx.fillStyle = this.isFinal ? "#EAFBFF" : "#C8F0FF";
+    ctx.beginPath();
+    ctx.moveTo(16 * scale, 0);
+    ctx.lineTo(4 * scale, 26 * scale);
+    ctx.lineTo(0, 42 * scale);
+    ctx.lineTo(-5 * scale, 24 * scale);
+    ctx.lineTo(-16 * scale, 0);
+    ctx.lineTo(0, 8 * scale);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "#68B8EA";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+class AdeptusShower {
+  constructor(owner) {
+    this.owner = owner;
+    this.life = 360; // 6 seconds
+    this.tick = 0;
+    this.spawned = 0;
+    this.finalStarted = false;
+    this.finalTimer = 0;
+  }
+
+  update() {
+    if (!this.owner || this.owner.hp <= 0) {
+      this.life = 0;
+      return;
+    }
+
+    if (!this.finalStarted) {
+      this.life--;
+      this.owner.adeptusUltTimer = Math.max(0, this.life);
+      this.tick--;
+      if (this.tick <= 0) {
+        const enemies = balls.filter((b) => b.team !== this.owner.team && b.hp > 0);
+        for (let i = 0; i < 2; i++) {
+          const enemy = enemies.length ? enemies[Math.floor(Math.random() * enemies.length)] : null;
+          const px = enemy ? enemy.x + (Math.random() * 90 - 45) : 60 + Math.random() * (canvas.width - 120);
+          const py = enemy ? enemy.y + (Math.random() * 90 - 45) : 60 + Math.random() * (canvas.height - 120);
+          adeptusSkills.push(new AdeptusIcicle(
+            Math.max(25, Math.min(canvas.width - 25, px)),
+            Math.max(35, Math.min(canvas.height - 25, py)),
+            this.owner,
+            { delay: 8 + i * 3, life: 20 }
+          ));
+        }
+        this.spawned += 2;
+        this.tick = 20;
+      }
+
+      if (this.life <= 0 && !this.finalStarted) {
+        this.finalStarted = true;
+        const enemy = getAdeptusTarget(this.owner, true);
+        const fx = enemy ? enemy.x : canvas.width * 0.5;
+        const fy = enemy ? enemy.y : canvas.height * 0.5;
+        adeptusSkills.push(new AdeptusIcicle(
+          Math.max(35, Math.min(canvas.width - 35, fx)),
+          Math.max(45, Math.min(canvas.height - 45, fy)),
+          this.owner,
+          { delay: 18, life: 42, isFinal: true }
+        ));
+        effects.push({ type: "adeptus_shower_final", x: fx, y: fy, life: 58, maxLife: 58 });
+        this.finalTimer = 34;
+        this.life = 34;
+        this.owner.adeptusUltTimer = 0;
+      }
+    } else if (this.finalTimer > 0) {
+      this.finalTimer--;
+      this.owner.adeptusUltTimer = 0;
+    } else {
+      this.owner.isUltActive = false;
+      this.owner.ultCharge = 0;
+      this.owner.adeptusUltTimer = 0;
+      this.owner.bonusText = "";
+      this.owner.adeptusUltDamageMultiplier = 1;
+      this.life = 0;
+      const ang = Math.random() * Math.PI * 2;
+      this.owner.vx = Math.cos(ang) * this.owner.baseSpeed;
+      this.owner.vy = Math.sin(ang) * this.owner.baseSpeed;
+    }
+  }
+
+  draw() {
+    const progress = this.life > 0 ? 1 - this.life / 360 : 1;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = 0.14 + Math.sin(Date.now() * 0.003) * 0.03;
+    ctx.fillStyle = "#7CCBFF";
+    ctx.beginPath();
+    ctx.arc(this.owner.x, this.owner.y, 170 + progress * 25, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 0.55;
+    ctx.strokeStyle = "#AEE4FF";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([10, 10]);
+    ctx.beginPath();
+    ctx.arc(this.owner.x, this.owner.y, 150 + Math.sin(Date.now() * 0.002) * 8, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Falling frost streaks spanning the arena.
+    for (let i = 0; i < 10; i++) {
+      const a = (Date.now() * 0.001 + i * 1.7) % (Math.PI * 2);
+      const sx = ((i * 113 + Math.floor(Date.now() * 0.06)) % Math.max(120, canvas.width));
+      const sy = (i * 71 + Math.floor(Date.now() * 0.11)) % Math.max(120, canvas.height);
+      const len = 12 + (i % 3) * 8;
+      ctx.strokeStyle = i % 2 ? "rgba(191,234,255,.55)" : "rgba(255,255,255,.48)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx - 5 + Math.cos(a) * 4, sy + len); ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
 // ================= KINICH =================
 // Pixel-art inspired grapple / projectile effects. These are drawn directly in
 // canvas so the character stays asset-free while still reading like Kinich.
@@ -815,8 +1298,14 @@ class KinichProjectile {
     // small pixel grid so it reads like an in-game sprite rather than a smooth
     // vector projectile.
     const sc=this.scale*(this.isFinal?2.55:this.isCharged?1.9:this.isUlt?1.28:1);
-    const outline='#203A34', deep='#355B50', body='#5F8B62', light='#8BAE66',
-          gold='#C49A4A', pale='#D4C98E';
+    const isCopycat = this.owner && this.owner.name === "Copycat" &&
+      (this.owner.copycatKinichActive || this.owner.copycatKinichUltActive);
+    const outline=isCopycat?'#5A1748':'#203A34',
+          deep=isCopycat?'#8E2E72':'#355B50',
+          body=isCopycat?'#D052A6':'#5F8B62',
+          light=isCopycat?'#FF76CE':'#8BAE66',
+          gold=isCopycat?'#FFB7E6':'#C49A4A',
+          pale=isCopycat?'#FFD9F2':'#D4C98E';
     const px=(v)=>Math.round(v*sc);
     const rect=(color,x,y,w,h)=>{ctx.fillStyle=color;ctx.fillRect(px(x),px(y),Math.max(1,px(w)),Math.max(1,px(h)));};
 
@@ -937,23 +1426,48 @@ class KinichGrapple {
   }
 }
 
+function drawCopycatKinichAjaw(x,y,scale,angle=0){
+  ctx.save();
+  ctx.translate(Math.round(x),Math.round(y));
+  ctx.rotate(angle);
+  ctx.imageSmoothingEnabled=false;
+  const s=scale;
+  const rect=(c,px,py,w,h)=>{ctx.fillStyle=c;ctx.fillRect(Math.round(px*s),Math.round(py*s),Math.max(1,Math.round(w*s)),Math.max(1,Math.round(h*s)));};
+  rect('#5A1748',-34,-22,68,44);
+  rect('#8E2E72',-26,-17,52,34);
+  rect('#D052A6',-18,-13,40,26);
+  rect('#FF76CE',-12,-9,28,18);
+  rect('#FFD9F2',-4,-4,14,8);
+  rect('#5A1748',20,-8,18,16);
+  rect('#FFB7E6',28,-3,10,6);
+  rect('#8E2E72',-29,-30,10,8);rect('#FFB7E6',14,-30,10,8);
+  rect('#8E2E72',-30,22,10,8);rect('#FFB7E6',15,22,10,8);
+  rect('#FF76CE',-44,8,14,6);rect('#FFB7E6',-50,13,8,4);
+  ctx.restore();
+}
+
 class KinichUltBoss {
   constructor(owner){this.owner=owner;this.life=9999;}
-  update(){if(!this.owner||this.owner.hp<=0||!this.owner.isUltActive)this.life=0;}
+  update(){
+    if(!this.owner||this.owner.hp<=0||(!this.owner.isUltActive&&!this.owner.copycatKinichUltActive)) this.life=0;
+  }
   getPosition(){return {x:canvas.width*0.5,y:-62};}
   draw(){
-    if(!this.owner||!this.owner.isUltActive)return;
+    if(!this.owner||(!this.owner.isUltActive&&!this.owner.copycatKinichUltActive))return;
     const p=this.owner.kinichUltPhase;if(!p||p==='none')return;
     const pos=this.getPosition();
     const scale=p==='windup'?3.15:p==='barrage'?3.35:p==='laserCharge'?3.75:3.65;
     // Face downward from outside the top edge of the arena.
-    drawKinichAjaw(pos.x,pos.y,scale,Math.PI/2/0.10);
+    const copy = this.owner.name === "Copycat" && this.owner.copycatKinichUltActive;
+    if(copy) drawCopycatKinichAjaw(pos.x,pos.y,scale,Math.PI/2/0.10);
+    else drawKinichAjaw(pos.x,pos.y,scale,Math.PI/2/0.10);
     ctx.save();ctx.imageSmoothingEnabled=false;
     if(p==='laserCharge'){
       const pulse=Math.floor(Date.now()/90)%2;
-      ctx.fillStyle=pulse?'#D8C94A':'#8BAE66';ctx.fillRect(Math.round(pos.x-32),Math.round(pos.y+78),64,5);
-      ctx.fillStyle='#1A241F';ctx.fillRect(Math.round(pos.x-18),Math.round(pos.y+72),36,4);
-      ctx.fillStyle='#D8C94A';ctx.fillRect(Math.round(pos.x-10),Math.round(pos.y+68),20,4);
+      ctx.fillStyle=copy?(pulse?'#FFD9F2':'#FF76CE'):(pulse?'#D8C94A':'#8BAE66');
+      ctx.fillRect(Math.round(pos.x-32),Math.round(pos.y+78),64,5);
+      ctx.fillStyle=copy?'#5A1748':'#1A241F';ctx.fillRect(Math.round(pos.x-18),Math.round(pos.y+72),36,4);
+      ctx.fillStyle=copy?'#FFB7E6':'#D8C94A';ctx.fillRect(Math.round(pos.x-10),Math.round(pos.y+68),20,4);
     }
     ctx.restore();
   }
@@ -982,7 +1496,8 @@ class KinichUltLaser {
         // The final Ajaw laser hits every living opponent individually,
         // including Copycat/Monkey King clones.
         const dealt=b.takeDamage(this.owner.damage*11.0,this.owner);
-        spawnText("AJAW LASER -"+dealt.toFixed(1),b.x,b.y-30,"#D8C94A");
+        const laserColor=this.owner.name==="Copycat"&&this.owner.copycatKinichUltActive?"#FF76CE":"#D8C94A";
+        spawnText("AJAW LASER -"+dealt.toFixed(1),b.x,b.y-30,laserColor);
       }
     }
     for(const beam of this.beams){
@@ -998,26 +1513,81 @@ class KinichUltLaser {
     ctx.save();
     ctx.imageSmoothingEnabled=false;
     ctx.globalAlpha=alpha;
+    const copy=this.owner.name==="Copycat"&&this.owner.copycatKinichUltActive;
     for(const beam of this.beams){
       ctx.save();
       ctx.translate(Math.round(this.x),Math.round(this.y));
       ctx.rotate(beam.angle);
       const len=beam.length;
-      ctx.fillStyle='#111814';ctx.fillRect(0,-27,len,54);
-      ctx.fillStyle='#314A36';ctx.fillRect(0,-19,len,38);
-      ctx.fillStyle='#8BAE66';ctx.fillRect(0,-11,len,22);
-      ctx.fillStyle='#D8C94A';ctx.fillRect(0,-4,len,8);
+      ctx.fillStyle=copy?'#4A123C':'#111814';ctx.fillRect(0,-27,len,54);
+      ctx.fillStyle=copy?'#7B1F61':'#314A36';ctx.fillRect(0,-19,len,38);
+      ctx.fillStyle=copy?'#D052A6':'#8BAE66';ctx.fillRect(0,-11,len,22);
+      ctx.fillStyle=copy?'#FF76CE':'#D8C94A';ctx.fillRect(0,-4,len,8);
       for(let i=0;i<24;i++){
         const px=60+i*48,h=(i%3===0?9:6);
-        ctx.fillStyle=i%2?'#203128':'#526B3E';
+        ctx.fillStyle=copy?(i%2?'#5A1748':'#8E2E72'):(i%2?'#203128':'#526B3E');
         ctx.fillRect(px,-h-10,18,h);
         ctx.fillRect(px,10,18,h);
       }
-      ctx.fillStyle='#F0E39A';ctx.fillRect(0,-1,34,2);
+      ctx.fillStyle=copy?'#FFD9F2':'#F0E39A';ctx.fillRect(0,-1,34,2);
       ctx.restore();
     }
     ctx.restore();
   }
+}
+
+class CopycatKinichUlt {
+  constructor(owner,target){
+    this.owner=owner;
+    this.target=target;
+    this.phase="windup";
+    this.timer=75;
+    this.shots=0;
+    this.life=9999;
+    owner.copycatKinichUltActive=true;
+    owner.kinichUltPhase="windup";
+    owner.kinichUltTimer=this.timer;
+    owner.kinichUltShots=0;
+    // Register the controller itself so the Copycat version actually advances
+    // through windup -> barrage -> laser instead of only drawing Ajaw.
+    kinichSkills.push(this);
+    kinichSkills.push(new KinichUltBoss(owner));
+  }
+  update(){
+    const o=this.owner;
+    if(!o||o.hp<=0){this.life=0;return;}
+    const enemy=(this.target&&this.target.hp>0&&this.target.team!==o.team)?this.target
+      :balls.find(b=>b.team!==o.team&&b.hp>0&&!b.isClone)||balls.find(b=>b.team!==o.team&&b.hp>0);
+    if(enemy)this.target=enemy;
+
+    if(this.phase==="windup"){
+      this.timer--;o.kinichUltPhase="windup";o.kinichUltTimer=this.timer;
+      if(this.timer<=0){this.phase="barrage";this.timer=300;o.kinichUltPhase="barrage";o.kinichUltTimer=this.timer;}
+    } else if(this.phase==="barrage"){
+      this.timer--;o.kinichUltPhase="barrage";o.kinichUltTimer=this.timer;
+      if(this.shots<20&&this.timer%15===0&&enemy&&enemy.hp>0){
+        projectiles.push(new KinichProjectile(canvas.width*0.5,8,enemy,o,{
+          damageMultiplier:0.50,scale:1.05,speed:6.4,isUlt:true,homing:false,life:170
+        }));
+        this.shots++;o.kinichUltShots=this.shots;
+      }
+      if(this.shots>=20){this.phase="laserCharge";this.timer=90;o.kinichUltPhase="laserCharge";o.kinichUltTimer=this.timer;}
+    } else if(this.phase==="laserCharge"){
+      this.timer--;o.kinichUltPhase="laserCharge";o.kinichUltTimer=this.timer;
+      if(this.timer<=0){
+        this.phase="laser";this.timer=60;o.kinichUltPhase="laser";o.kinichUltTimer=this.timer;
+        const allEnemies=balls.filter(b=>b.team!==o.team&&b.hp>0);
+        kinichSkills.push(new KinichUltLaser(o,allEnemies));
+      }
+    } else if(this.phase==="laser"){
+      this.timer--;o.kinichUltPhase="laser";o.kinichUltTimer=this.timer;
+      if(this.timer<=0){
+        o.copycatKinichUltActive=false;o.kinichUltPhase="none";o.kinichUltTimer=0;o.kinichUltShots=0;o.kinichUltTarget=null;
+        this.life=0;
+      }
+    }
+  }
+  draw(){}
 }
 
 class KinichField {
@@ -1034,6 +1604,16 @@ class KinichField {
       this.owner.y=Math.max(this.owner.radius,Math.min(canvas.height-this.owner.radius,y));
       this.owner.angle=Math.atan2(this.target.y-this.owner.y,this.target.x-this.owner.x);
       this.owner.vx=0;this.owner.vy=0;
+
+      if(this.owner.copycatKinichActive){
+        if(this.owner.kinichAttackCD>0)this.owner.kinichAttackCD--;
+        if(this.owner.kinichAttackCD<=0){
+          projectiles.push(new KinichProjectile(this.owner.x,this.owner.y,this.target,this.owner,{
+            damageMultiplier:0.55,scale:0.9,speed:9.2,life:150
+          }));
+          this.owner.kinichAttackCD=34;
+        }
+      }
     }
     if(this.owner.kinichChargeTimer>0){this.owner.vx=0;this.owner.vy=0;}
     for(const pt of this.points){
@@ -1041,13 +1621,17 @@ class KinichField {
       const px=this.target.x+Math.cos(pt.angle)*pt.radius,py=this.target.y+Math.sin(pt.angle)*pt.radius;
       if(Math.hypot(this.owner.x-px,this.owner.y-py)<this.owner.radius+10&&this.owner.kinichChargeTimer<=0){
         pt.used=true;this.owner.kinichChargeTimer=24;this.owner.kinichChargeTarget=this.target;
+        if (this.owner.name === "Kinich") {
+          this.owner.ultCharge = Math.min(this.owner.ultMax, this.owner.ultCharge + 150);
+          spawnText("ULT CHARGE +150", this.owner.x, this.owner.y - 44, "#8BAE66");
+        }
         effects.push({type:"kinich_charge_start",x:this.owner.x,y:this.owner.y,life:24,maxLife:24});
         spawnText("CHARGING SPIKER!",this.owner.x,this.owner.y-28,"#8BAE66");break;
       }
     }
     if(this.life<=0)this.finish();}
-  finish(){if(!this.owner)return;this.owner.kinichField=null;this.owner.kinichSkillState="idle";this.owner.kinichAjawMode=false;this.owner.kinichChargeTimer=0;this.owner.kinichChargeTarget=null;this.owner.kinichSkillTarget=null;}
-  draw(){if(!this.owner||!this.target||this.life<=0)return;const fade=Math.min(1,this.life/24,(this.maxLife-this.life+18)/18),t=Date.now()*.0015;ctx.save();ctx.imageSmoothingEnabled=false;ctx.globalCompositeOperation="lighter";ctx.globalAlpha=.13*fade;ctx.fillStyle="#8BAE66";ctx.shadowColor="transparent";ctx.shadowBlur=0;ctx.beginPath();ctx.arc(this.target.x,this.target.y,this.radius,0,Math.PI*2);ctx.fill();ctx.globalAlpha=.78*fade;ctx.strokeStyle="#8BAE66";ctx.lineWidth=2.5;ctx.setLineDash([13,10]);ctx.beginPath();ctx.arc(this.target.x,this.target.y,this.radius,t%(Math.PI*2),t%(Math.PI*2)+Math.PI*1.72);ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=.34*fade;ctx.strokeStyle="#8BAE66";ctx.lineWidth=1.25;ctx.beginPath();ctx.arc(this.target.x,this.target.y,this.orbitRadius+2,0,Math.PI*2);ctx.stroke();for(const pt of this.points){if(pt.used)continue;const px=this.target.x+Math.cos(pt.angle)*pt.radius,py=this.target.y+Math.sin(pt.angle)*pt.radius,pulse=1+Math.sin(t*4+pt.pulse)*.16;ctx.save();ctx.translate(Math.round(px),Math.round(py));ctx.scale(pulse,pulse);ctx.shadowColor="transparent";ctx.shadowBlur=0;ctx.fillStyle="#526B3E";ctx.fillRect(-8,-8,16,16);ctx.fillStyle="#8BAE66";ctx.fillRect(-5,-5,10,10);ctx.fillStyle="#C4D89A";ctx.fillRect(-2,-2,4,4);ctx.restore();}ctx.restore();}
+  finish(){if(!this.owner)return;this.owner.kinichField=null;this.owner.kinichSkillState="idle";this.owner.kinichAjawMode=false;this.owner.kinichChargeTimer=0;this.owner.kinichChargeTarget=null;this.owner.kinichSkillTarget=null;this.owner.copycatKinichActive=false;}
+  draw(){if(!this.owner||!this.target||this.life<=0)return;const copy=this.owner.name==="Copycat";const c1=copy?"#FF76CE":"#8BAE66",c2=copy?"#8E2E72":"#526B3E",c3=copy?"#FFD9F2":"#C4D89A";const fade=Math.min(1,this.life/24,(this.maxLife-this.life+18)/18),t=Date.now()*.0015;ctx.save();ctx.imageSmoothingEnabled=false;ctx.globalCompositeOperation="lighter";ctx.globalAlpha=.13*fade;ctx.fillStyle=c1;ctx.shadowColor="transparent";ctx.shadowBlur=0;ctx.beginPath();ctx.arc(this.target.x,this.target.y,this.radius,0,Math.PI*2);ctx.fill();ctx.globalAlpha=.78*fade;ctx.strokeStyle=c1;ctx.lineWidth=2.5;ctx.setLineDash([13,10]);ctx.beginPath();ctx.arc(this.target.x,this.target.y,this.radius,t%(Math.PI*2),t%(Math.PI*2)+Math.PI*1.72);ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=.34*fade;ctx.strokeStyle=c1;ctx.lineWidth=1.25;ctx.beginPath();ctx.arc(this.target.x,this.target.y,this.orbitRadius+2,0,Math.PI*2);ctx.stroke();for(const pt of this.points){if(pt.used)continue;const px=this.target.x+Math.cos(pt.angle)*pt.radius,py=this.target.y+Math.sin(pt.angle)*pt.radius,pulse=1+Math.sin(t*4+pt.pulse)*.16;ctx.save();ctx.translate(Math.round(px),Math.round(py));ctx.scale(pulse,pulse);ctx.shadowColor="transparent";ctx.shadowBlur=0;ctx.fillStyle=c2;ctx.fillRect(-8,-8,16,16);ctx.fillStyle=c1;ctx.fillRect(-5,-5,10,10);ctx.fillStyle=c3;ctx.fillRect(-2,-2,4,4);ctx.restore();}ctx.restore();}
 }
 
 class PurpleBeam {
@@ -1847,6 +2431,12 @@ class Ball {
 
     this.copycatPassiveTimer = 0;
     this.copycatSHAActive = false;
+    this.copycatKinichActive = false;
+    this.copycatKinichUltActive = false;
+    this.copycatKinichUltTimer = 0;
+    this.copycatFuneralActive = false;
+    this.copycatFuneralTimer = 0;
+    this.copycatSpiritTimer = 0;
 
     this.bfTarget = Math.random() * 100;
     this.bfSpeed = 0.4;
@@ -1903,6 +2493,30 @@ class Ball {
     this.funeralChargeAttackTarget = null;
     this.funeralChargeAttackHit = false;
     this.funeralChargeAttackAngle = 0;
+
+    // Adeptus
+    // Deliberate archer cadence: slower basic fire rate, with a longer wind-up
+    // so Frostflake shots feel powerful rather than machine-gun fast.
+    this.atkSpeed = 0.70;
+    this.adeptusBasicCD = 38;
+    this.adeptusChargeCD = 190;
+    this.adeptusState = "idle"; // idle, charge1, charge2, dash
+    this.adeptusChargeTimer = 0;
+    this.adeptusChargeTarget = null;
+    this.adeptusChargeAngle = 0;
+    this.adeptusHeartStacks = 0;
+    this.adeptusSkillCD = 420;
+    this.adeptusLotus = null;
+    this.adeptusDashTimer = 0;
+    this.adeptusDashStartX = this.x;
+    this.adeptusDashStartY = this.y;
+    this.adeptusDashEndX = this.x;
+    this.adeptusDashEndY = this.y;
+    this.adeptusUltTimer = 0;
+    this.adeptusUltDamageMultiplier = 1;
+    this.adeptusSlowTimer = 0;
+    this.adeptusSlowFactor = 1;
+    this.adeptusCryoMark = null;
 
     // Kinich
     this.kinichMarkTarget = null;
@@ -2535,6 +3149,7 @@ class Ball {
       }
       ctx.restore();
     } else {
+      if (this.name === "Adeptus") drawAdeptusBow(this.x, this.y, this.angle, this.adeptusState === "charge2" ? 1.18 : this.adeptusState === "charge1" ? 1.08 : 1);
       let segs = this.getWeaponSegments();
 
       // Retaliator idle sword: point away from the nearest enemy.
@@ -2726,6 +3341,7 @@ class Ball {
       ? (this.bloodchainBankai ? "#b11226" : "#ffffff")
       : this.color;
     ctx.stroke();
+    if (this.name === "Adeptus") drawAdeptusCharacter(this);
     if (this.kinichMarkedBy && this.kinichMarkedBy.hp > 0 && this.kinichMarkedBy.team !== this.team) {
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
@@ -2750,6 +3366,28 @@ class Ball {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(Math.floor(this.hp), this.x, this.y);
+
+    if (this.name !== "Adeptus" && this.adeptusCryoMark && this.adeptusCryoMark.life > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      const pulse = 1 + Math.sin(Date.now() * 0.012) * 0.08;
+      ctx.translate(this.x, this.y);
+      ctx.strokeStyle = "rgba(191,234,255,.88)";
+      ctx.shadowColor = "#7CCBFF";
+      ctx.shadowBlur = 11;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.arc(0, 0, (this.radius + 8) * pulse, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+      for (let i = 0; i < 6; i++) {
+        const a = i * Math.PI / 3 + Date.now() * 0.0008;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * (this.radius + 3), Math.sin(a) * (this.radius + 3));
+        ctx.lineTo(Math.cos(a) * (this.radius + 12), Math.sin(a) * (this.radius + 12));
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
 
     if (this.stunTimer > 0 || this.domainDebuffTimer > 0) {
       ctx.save();
@@ -2778,6 +3416,128 @@ class Ball {
         this.hp = 0;
         this.visible = false;
         return;
+      }
+    }
+
+    // Adeptus-applied Cryo slow/mark. These are target-side states so every character
+    // naturally respects Ganyu's control effects without replacing the normal movement AI.
+    if (this.adeptusCryoMark) {
+      this.adeptusCryoMark.life--;
+      if (this.adeptusCryoMark.life <= 0 || !this.adeptusCryoMark.owner || this.adeptusCryoMark.owner.hp <= 0) {
+        this.adeptusCryoMark = null;
+      } else {
+        this.adeptusSlowTimer = Math.max(this.adeptusSlowTimer, 2);
+        this.adeptusSlowFactor = Math.min(this.adeptusSlowFactor, 0.82);
+      }
+    }
+    if (this.adeptusSlowTimer > 0) this.adeptusSlowTimer--;
+    else this.adeptusSlowFactor = 1;
+
+    // Adeptus: automatic Frostflake Bow cycle, Ice Lotus repositioning, and Celestial Shower.
+    if (this.name === "Adeptus") {
+      this.damage = characterDB["Adeptus"].damage;
+
+      if (this.adeptusSkillCD > 0) this.adeptusSkillCD--;
+      if (this.adeptusBasicCD > 0) this.adeptusBasicCD--;
+      if (this.adeptusChargeCD > 0 && this.adeptusState === "idle") this.adeptusChargeCD--;
+
+      const enemy = getAdeptusTarget(this, false);
+
+      if (this.adeptusState === "dash") {
+        const total = 14;
+        const progress = 1 - this.adeptusDashTimer / total;
+        this.x = this.adeptusDashStartX + (this.adeptusDashEndX - this.adeptusDashStartX) * progress;
+        this.y = this.adeptusDashStartY + (this.adeptusDashEndY - this.adeptusDashStartY) * progress;
+        this.vx = 0; this.vy = 0;
+        this.adeptusDashTimer--;
+        if (this.adeptusDashTimer <= 0) {
+          this.adeptusState = "idle";
+          const ang = Math.random() * Math.PI * 2;
+          this.vx = Math.cos(ang) * this.baseSpeed;
+          this.vy = Math.sin(ang) * this.baseSpeed;
+        }
+      } else if (!this.isUltActive && this.adeptusState === "idle" && gameState === "playing" && !this.isClone) {
+        if (enemy) {
+          this.angle = Math.atan2(enemy.y - this.y, enemy.x - this.x);
+
+          // Ice Lotus triggers when an enemy gets close enough to threaten Adeptus.
+          if (this.adeptusSkillCD <= 0 && Math.hypot(enemy.x - this.x, enemy.y - this.y) < 235) {
+            const dx = this.x - enemy.x;
+            const dy = this.y - enemy.y;
+            const dist = Math.hypot(dx, dy) || 1;
+            const dashDistance = 165;
+            const backX = Math.max(this.radius + 4, Math.min(canvas.width - this.radius - 4, this.x + (dx / dist) * dashDistance));
+            const backY = Math.max(this.radius + 4, Math.min(canvas.height - this.radius - 4, this.y + (dy / dist) * dashDistance));
+            this.adeptusDashStartX = this.x;
+            this.adeptusDashStartY = this.y;
+            this.adeptusDashEndX = backX;
+            this.adeptusDashEndY = backY;
+            this.adeptusDashTimer = 14;
+            this.adeptusState = "dash";
+            this.adeptusSkillCD = 420;
+            if (this.adeptusLotus && this.adeptusLotus.hp > 0) this.adeptusLotus.explode();
+            this.adeptusLotus = new AdeptusLotus(this.x, this.y, this);
+            // Put the Lotus first so existing target selectors naturally choose it.
+            // It behaves like a normal combat target until it expires or is destroyed.
+            balls.unshift(this.adeptusLotus);
+            effects.push({ type: "adeptus_dash", x: this.x, y: this.y, endX: backX, endY: backY, life: 24, maxLife: 24 });
+            spawnText("ICE LOTUS!", this.x, this.y - 30, "#7CCBFF");
+          } else {
+            // Regular long-range basic shot.
+            if (this.adeptusBasicCD <= 0) {
+              projectiles.push(new AdeptusArrow(this.x, this.y, enemy, this, {
+                damageMultiplier: 0.7, speed: 12.5, life: 190
+              }));
+              this.adeptusBasicCD = 105;
+            }
+
+            // Automatic two-stage charge cycle. The character pauses while charging,
+            // reproducing Ganyu's deliberate Stage 1 -> Stage 2 cadence.
+            if (this.adeptusChargeCD <= 0) {
+              this.adeptusState = "charge1";
+              this.adeptusChargeTimer = 36;
+              this.adeptusChargeTarget = enemy;
+              this.adeptusChargeAngle = this.angle;
+              this.vx = 0; this.vy = 0;
+              effects.push({ type: "adeptus_charge", x: this.x, y: this.y, life: 72, maxLife: 72 });
+            }
+          }
+        }
+      } else if (!this.isUltActive && this.adeptusState === "charge1") {
+        this.vx = 0; this.vy = 0;
+        this.adeptusChargeTimer--;
+        const target = this.adeptusChargeTarget;
+        if (target && target.hp > 0) this.adeptusChargeAngle = Math.atan2(target.y - this.y, target.x - this.x);
+        this.angle = this.adeptusChargeAngle;
+        if (this.adeptusChargeTimer <= 0) {
+          const targetX = target && target.hp > 0 ? target.x : this.x + Math.cos(this.adeptusChargeAngle) * 250;
+          const targetY = target && target.hp > 0 ? target.y : this.y + Math.sin(this.adeptusChargeAngle) * 250;
+          projectiles.push(new AdeptusArrow(this.x, this.y, target && target.hp > 0 ? target : null, this, {
+            targetX, targetY, damageMultiplier: 2.0, speed: 13.5, life: 190, isStage1: true
+          }));
+          spawnText("CHARGE I!", this.x, this.y - 28, "#BFEAFF");
+          this.adeptusState = "charge2";
+          this.adeptusChargeTimer = 50;
+        }
+      } else if (!this.isUltActive && this.adeptusState === "charge2") {
+        this.vx = 0; this.vy = 0;
+        this.adeptusChargeTimer--;
+        const target = this.adeptusChargeTarget;
+        if (target && target.hp > 0) this.adeptusChargeAngle = Math.atan2(target.y - this.y, target.x - this.x);
+        this.angle = this.adeptusChargeAngle;
+        if (this.adeptusChargeTimer <= 0) {
+          const targetX = target && target.hp > 0 ? target.x : this.x + Math.cos(this.adeptusChargeAngle) * 320;
+          const targetY = target && target.hp > 0 ? target.y : this.y + Math.sin(this.adeptusChargeAngle) * 320;
+          const chargeBonus = 1 + this.adeptusHeartStacks * 0.10;
+          projectiles.push(new AdeptusArrow(this.x, this.y, target && target.hp > 0 ? target : null, this, {
+            targetX, targetY, damageMultiplier: 4.5, speed: 11.5, life: 210, isFrostflake: true, chargeBonus
+          }));
+          effects.push({ type: "adeptus_frostflake_cast", x: this.x, y: this.y, life: 26, maxLife: 26 });
+          spawnText("FROSTFLAKE!", this.x, this.y - 30, "#AEE4FF");
+          this.adeptusState = "idle";
+          this.adeptusChargeCD = 175;
+          this.adeptusChargeTarget = null;
+        }
       }
     }
 
@@ -2946,10 +3706,11 @@ class Ball {
         if (burn.tickTimer <= 0 && burn.ticksLeft > 0) {
           const burnDamage = this.takeDamage(burn.owner.damage * 0.15, burn.owner);
           if (burnDamage > 0) {
-            spawnText("BURN -" + burnDamage.toFixed(1), this.x, this.y - 30, "#ff7043");
+            spawnText("BURN -" + burnDamage.toFixed(1), this.x, this.y - 30, burn.owner && burn.owner.name === "Copycat" ? "#FF76CE" : "#ff7043");
             effects.push({
               type: "funeral_burn_tick",
               x: this.x, y: this.y, life: 18, maxLife: 18,
+              copycat: burn.owner && burn.owner.name === "Copycat",
             });
           }
           burn.ticksLeft--;
@@ -3002,6 +3763,9 @@ class Ball {
             }
           }
           if (hitBySword) {
+            if (p.isFrostflake && p.owner && p.owner.name === "Adeptus") {
+              p.owner.adeptusRegisterStage2Miss?.();
+            }
             p.life = 0;
             spawnText("ERASED!", p.x, p.y - 10, "#e74c3c");
             effects.push({ type: "black_flash", x: p.x, y: p.y, life: 10, maxLife: 10 });
@@ -3009,7 +3773,25 @@ class Ball {
         }
       }
 
-  for (let i = soundTraps.length - 1; i >= 0; i--) {
+  // Tyrant portal swords use a dedicated array, so erase them explicitly.
+      for (let i = tyrantSwords.length - 1; i >= 0; i--) {
+        let s = tyrantSwords[i];
+        if (s.owner && s.owner.team !== this.team) {
+          let hitBySword = false;
+          for (let seg of weaponSegs) {
+            let cp = getClosestPointOnSegment({ x: s.x, y: s.y }, seg.p1, seg.p2);
+            let dist = Math.hypot(s.x - cp.x, s.y - cp.y);
+            if (dist < 15 + this.wWidth / 2) { hitBySword = true; break; }
+          }
+          if (hitBySword) {
+            tyrantSwords.splice(i,1);
+            spawnText("ERASED!", s.x, s.y - 10, "#e74c3c");
+            effects.push({ type:"black_flash", x:s.x, y:s.y, life:10, maxLife:10 });
+          }
+        }
+      }
+
+      for (let i = soundTraps.length - 1; i >= 0; i--) {
         let st = soundTraps[i];
         if (st.owner && st.owner.team !== this.team) {
           let hitBySword = false;
@@ -3068,12 +3850,52 @@ class Ball {
     }
 
     if (this.name === "Copycat") {
+      if (this.copycatKinichActive) {
+        this.vx = 0; this.vy = 0;
+
+        // Copycat keeps Kinich's charged-node mechanic too.
+        // KinichField starts this timer when Copycat touches a node; when the
+        // charge finishes, fire the BIG SPIKER projectile.
+        if (this.kinichChargeTimer > 0) {
+          this.kinichChargeTimer--;
+          if (this.kinichChargeTimer <= 0 && this.kinichChargeTarget && this.kinichChargeTarget.hp > 0) {
+            projectiles.push(new KinichProjectile(this.x, this.y, this.kinichChargeTarget, this, {
+              damageMultiplier: 1.7,
+              scale: 1.2,
+              speed: 8.5,
+              isCharged: true,
+              life: 170,
+            }));
+            effects.push({ type: "kinich_charge_fire", x: this.x, y: this.y, life: 22, maxLife: 22, copycat: true });
+            spawnText("COPY: BIG SPIKER!", this.x, this.y - 28, "#FF76CE");
+            this.kinichChargeTarget = null;
+          }
+        }
+      }
+      if (this.copycatFuneralActive) {
+        // Copycat's Papilio copy is a buff, not a movement lock.
+        // Let the normal movement/AI logic below keep controlling Copycat.
+        this.copycatFuneralTimer--;
+        if (this.copycatFuneralTimer <= 0) {
+          this.copycatFuneralActive = false;
+          this.funeralEActive = false;
+          this.funeralEBonusDamage = 0;
+          const ang = Math.random() * Math.PI * 2;
+          this.vx = Math.cos(ang) * this.baseSpeed;
+          this.vy = Math.sin(ang) * this.baseSpeed;
+        }
+      }
+      if (this.copycatSpiritTimer > 0) {
+        this.copycatSpiritTimer--;
+        this.vx = 0; this.vy = 0;
+        if (this.copycatSpiritTimer <= 0) this.copycatFuneralSpirit = false;
+      }
       this.copycatPassiveTimer++;
       if (this.copycatPassiveTimer >= 300 && gameState === "playing") {
         this.copycatPassiveTimer = 0;
         let enemy = balls.find((b) => b.team !== this.team && b.hp > 0);
         if (enemy) {
-          let skillType = Math.floor(Math.random() * 10);
+          let skillType = Math.floor(Math.random() * 12);
           if (skillType === 0) {
             enemy.stunTimer = 40;
             spawnText("COPY: CURSED SPEECH!", enemy.x, enemy.y - 25, "#FF76CE");
@@ -3124,6 +3946,37 @@ class Ball {
               if (this.hp > 0 && enemy.hp > 0) projectiles.push(new CopycatGetsugaJujisho(this, enemy, 2));
             }, 120);
             spawnText("COPY: GETSUGA JŪJISHŌ!", this.x, this.y - 25, "#FF76CE");
+          } else if (skillType === 10) {
+            // Copy Kinich's full Skill sequence: grapple animation first,
+            // then transition into the Nightsoul orbit/field.
+            if (!this.copycatKinichActive) {
+              this.copycatKinichActive = true;
+              this.kinichSkillState = "grapple";
+              this.kinichAjawMode = true;
+              this.kinichSkillTarget = enemy;
+              this.kinichMarkTarget = enemy;
+              this.kinichAttackCD = 0;
+              this.kinichChargeTimer = 0;
+              this.kinichChargeTarget = null;
+              kinichSkills.push(new KinichGrapple(this, enemy));
+              spawnText("COPY: CANOPY GRAPPLE!", this.x, this.y - 25, "#FF76CE");
+            }
+          } else if (skillType === 11) {
+            // Copy Funeral's Paramita Papilio activation: HP sacrifice, permanent DMG gain, burn mode.
+            if (!this.copycatFuneralActive) {
+              const currentDamage = this.damage;
+              const permanentGain = currentDamage * 0.40;
+              this.hp = Math.max(1, this.hp * 0.75);
+              this.funeralPermanentBonusDamage += permanentGain;
+              this.funeralEBonusDamage = permanentGain;
+              this.funeralEActive = true;
+              this.copycatFuneralActive = true;
+              this.copycatFuneralTimer = this.funeralPapilioDuration;
+              this.damage = currentDamage + permanentGain;
+              effects.push({ type:"funeral_papilio_transform", x:this.x,y:this.y,life:72,maxLife:72,angle:this.angle,copycat:true });
+              effects.push({ type:"funeral_papilio_burst", x:this.x,y:this.y,life:38,maxLife:38,copycat:true });
+              spawnText("COPY: PARAMITA PAPILIO!", this.x, this.y - 25, "#FF76CE");
+            }
           }
         }
       }
@@ -3136,7 +3989,7 @@ class Ball {
             scatteredSwords.splice(i, 1);
             let enemy = balls.find((b) => b.team !== this.team && b.hp > 0);
             if (enemy) {
-              let ultType = Math.floor(Math.random() * 12);
+              let ultType = Math.floor(Math.random() * 14);
 
               if (ultType === 0) {
                 enemy.stunTimer = 180;
@@ -3219,8 +4072,17 @@ class Ball {
                 });
                 spawnText("[TYRANT] CHAIN OF TYRANNY! 5s", enemy.x, enemy.y - 30, "#FF76CE");
               } else if (ultType === 11) {
-                // Copycat's ultimate version of Getsuga Tenshō.
-                // It is sure-hit and deals 30% of the target's current HP at cast time.
+                // Copy Kinich's full BOOMSHAKALAKA: Ajaw descent, projectile barrage and laser.
+                new CopycatKinichUlt(this, enemy);
+                spawnText("[KINICH] BOOMSHAKALAKA!", this.x, this.y - 30, "#FF76CE");
+              } else if (ultType === 12) {
+                // Copy Funeral's Spirit Soother directly, including its heal and burst damage.
+                this.copycatSpiritTimer = 78;
+                this.copycatFuneralSpirit = true;
+                performFuneralBurst.call(this);
+                spawnText("[FUNERAL] SPIRIT SOOTHER!", this.x, this.y - 30, "#FF76CE");
+              } else if (ultType === 13) {
+                // Keep the existing Copycat Getsuga Tenshō option.
                 this.angle = Math.atan2(enemy.y - this.y, enemy.x - this.x);
                 bloodchainSkills.push(new CopycatGetsugaTensho(this, enemy));
                 spawnText("[COPYCAT] GETSUGA TENSHŌ!", this.x, this.y - 30, "#FF76CE");
@@ -3663,8 +4525,11 @@ class Ball {
 
     let currentSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
     let targetSpeed = this.baseSpeed;
-    if ((!this.isUltActive && !(this.name === "Kinich" && ["aim","grapple","field"].includes(this.kinichSkillState))) ||
-        (this.name !== "Brawler" && this.name !== "Illustrade" && this.name !== "Retaliator" && this.name !== "Antimagic")) {
+    if ((!this.isUltActive && !(this.name === "Kinich" && ["aim","grapple","field"].includes(this.kinichSkillState)) &&
+         !(this.name === "Adeptus" && ["charge1","charge2","dash"].includes(this.adeptusState))) ||
+        (this.name === "Adeptus" && this.isUltActive) ||
+        (this.name !== "Brawler" && this.name !== "Illustrade" && this.name !== "Retaliator" && this.name !== "Antimagic" && this.name !== "Adeptus")) {
+      targetSpeed *= this.adeptusSlowTimer > 0 ? (this.adeptusSlowFactor || 1) : 1;
       if (currentSpeed > targetSpeed) {
         this.vx *= 0.92;
         this.vy *= 0.92;
@@ -3725,6 +4590,18 @@ class Ball {
     if (gameState === "playing" && !this.isClone && this.name === "Tyrant" && !this.isUltActive && this.ultCharge >= this.ultMax) {
       triggerTyrantChainUlt(this);
     }
+  }
+
+  adeptusRegisterStage2Hit(target) {
+    if (this.name !== "Adeptus") return;
+    this.adeptusHeartStacks = Math.min(3, this.adeptusHeartStacks + 1);
+    spawnText("UNDIVIDED HEART x" + this.adeptusHeartStacks, target.x, target.y - 36, "#CFF5FF");
+  }
+
+  adeptusRegisterStage2Miss() {
+    if (this.name !== "Adeptus") return;
+    if (this.adeptusHeartStacks > 0) spawnText("HEART BROKEN", this.x, this.y - 28, "#8FD3FF");
+    this.adeptusHeartStacks = 0;
   }
 
   cancelKinichSkill(){if(this.name!=="Kinich")return;if(this.kinichField&&this.kinichField.life>0)this.kinichField.life=0;this.kinichField=null;this.kinichSkillState="idle";this.kinichAjawMode=false;this.kinichChargeTimer=0;this.kinichChargeTarget=null;this.kinichSkillTarget=null;}
@@ -3796,7 +4673,7 @@ class Ball {
           soundTraps.push(new SoundTrap(tx, ty, types[i % types.length], this));
         }
         setTimeout(() => {
-          for (let i = soundTraps.length - 1; i >= 0; i--) {
+      for (let i = soundTraps.length - 1; i >= 0; i--) {
             let trap = soundTraps[i];
             if (trap.owner === this) {
               if (enemy && enemy.hp > 0) trap.trigger(enemy);
@@ -3876,9 +4753,13 @@ class Ball {
         this.funeralUltPhase = "eCharge";
         this.funeralUltTimer = 45;
       }
+    } else if (this.name === "Adeptus") {
+      this.adeptusUltTimer = 360;
+      this.adeptusUltDamageMultiplier = 1.2;
+      adeptusSkills.push(new AdeptusShower(this));
     }
 
-    if (this.name !== "Sword Saint" && this.name !== "Stasis" && this.name !== "Illustrade" && this.name !== "Infinity" && this.name !== "Echoes" && this.name !== "Funeral" && this.name !== "Kinich") {
+    if (this.name !== "Sword Saint" && this.name !== "Stasis" && this.name !== "Illustrade" && this.name !== "Infinity" && this.name !== "Echoes" && this.name !== "Funeral" && this.name !== "Kinich" && this.name !== "Adeptus") {
       let ultDuration = this.name === "Brawler" ? 1000 : this.name === "Antimagic" ? 2000 : 5000;
       setTimeout(() => {
         this.isUltActive = false;
@@ -3949,7 +4830,7 @@ function performFuneralChargeAttack(target) {
 }
 
 function performFuneralBurst() {
-  if (this.name !== "Funeral" || this.hp <= 0) return;
+  if ((this.name !== "Funeral" && !this.copycatFuneralSpirit) || this.hp <= 0) return;
 
   const enemy = balls.find((b) => b.team !== this.team && b.hp > 0 && !b.isClone)
     || balls.find((b) => b.team !== this.team && b.hp > 0);
@@ -3999,8 +4880,8 @@ function performFuneralBurst() {
         blossomExplosion = enemy.takeDamage(6.0, this);
         enemy.hutaoBloodBlossom = null;
         this.hutaoHitCount = 0;
-        effects.push({ type: "hutao_blossom_burst", x: enemy.x, y: enemy.y, life: 44, maxLife: 44 });
-        spawnText("BLOOD BLOSSOM! -" + blossomExplosion.toFixed(1), enemy.x, enemy.y - 28, "#c0392b");
+        effects.push({ type: "hutao_blossom_burst", x: enemy.x, y: enemy.y, life: 44, maxLife: 44, copycat: this.name === "Copycat" });
+        spawnText("BLOOD BLOSSOM! -" + blossomExplosion.toFixed(1), enemy.x, enemy.y - 28, this.name === "Copycat" ? "#FF76CE" : "#c0392b");
       }
 
       // Strong lateral shove in the same direction as the spirit sweep.
@@ -4008,7 +4889,7 @@ function performFuneralBurst() {
       enemy.vy = Math.sin(angle) * 18;
       enemy.knockbackTimer = 55;
       enemy.stunTimer = Math.max(enemy.stunTimer, 14);
-      spawnText("SPIRIT SOOTHER -" + (burstDamage + blossomExplosion).toFixed(1), enemy.x, enemy.y - 45, "#ff7043");
+      spawnText("SPIRIT SOOTHER -" + (burstDamage + blossomExplosion).toFixed(1), enemy.x, enemy.y - 45, this.name === "Copycat" ? "#FF76CE" : "#ff7043");
     }
   }
 
@@ -4021,13 +4902,14 @@ function performFuneralBurst() {
     impactX: hitEnemy ? hitEnemy.x : oldX + Math.cos(angle) * 180,
     impactY: hitEnemy ? hitEnemy.y : oldY + Math.sin(angle) * 180,
     life: 78, maxLife: 78,
+    copycat: !!this.copycatFuneralSpirit,
   });
 
   // Movement is resumed by the burstActive state after the 360-degree animation ends.
 }
 
 function applyFuneralBloodBlossom(attacker, target, force = false) {
-  if (!attacker || attacker.name !== "Funeral" || attacker.isClone || !target || target.hp <= 0) return;
+  if (!attacker || (attacker.name !== "Funeral" && !attacker.copycatFuneralActive && !attacker.copycatFuneralSpirit) || attacker.isClone || !target || target.hp <= 0) return;
 
   if (force) {
     attacker.hutaoHitCount = 0;
@@ -4049,12 +4931,13 @@ function applyFuneralBloodBlossom(attacker, target, force = false) {
       y: target.y,
       life: 18,
       maxLife: 18,
+      copycat: attacker.name === "Copycat",
     });
   }
 }
 
 function applyFuneralBurn(attacker, target) {
-  if (!attacker || attacker.name !== "Funeral" || !attacker.funeralEActive) return;
+  if (!attacker || (attacker.name !== "Funeral" && !attacker.copycatFuneralActive) || !attacker.funeralEActive) return;
   if (!target || target.hp <= 0 || target === attacker) return;
 
   // Papilio-infused attacks apply a short Pyro burn. Reapplying refreshes it.
@@ -4070,6 +4953,7 @@ function applyFuneralBurn(attacker, target) {
     y: target.y,
     life: 20,
     maxLife: 20,
+    copycat: attacker.name === "Copycat",
   });
 }
 
@@ -4195,6 +5079,7 @@ function checkPhysicsAndHits() {
       let B = balls[j];
       let dx = B.x - A.x, dy = B.y - A.y;
       let dist = Math.sqrt(dx * dx + dy * dy);
+      if (A.isAdeptusLotus || B.isAdeptusLotus) continue;
       let isEnemy = A.team !== B.team;
       // Retaliator adalah counter-attack murni: tidak pernah bisa parry
       // dan tidak pernah bisa diparry, baik saat ult maupun normal.
@@ -4242,7 +5127,7 @@ function checkPhysicsAndHits() {
               A.rotSpeed *= -1;
               let finalDmg = B.takeDamage(A.damage, A);
               B.iFrames = 60;
-              if (A.name === "Funeral" && finalDmg > 0) {
+              if ((A.name === "Funeral" || A.copycatFuneralActive) && finalDmg > 0) {
                 applyFuneralBloodBlossom(A, B);
                 applyFuneralBurn(A, B);
               }
@@ -4306,7 +5191,7 @@ function checkPhysicsAndHits() {
               B.rotSpeed *= -1;
               let finalDmg = A.takeDamage(B.damage, B);
               A.iFrames = 60;
-              if (B.name === "Funeral" && finalDmg > 0) {
+              if ((B.name === "Funeral" || B.copycatFuneralActive) && finalDmg > 0) {
                 applyFuneralBloodBlossom(B, A);
                 applyFuneralBurn(B, A);
               }
@@ -4481,6 +5366,200 @@ function getClosestPointOnSegment(p, v, w) {
   if (l2 === 0) return { x: v.x, y: v.y };
   let t = Math.max(0, Math.min(1, ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2));
   return { x: v.x + t * (w.x - v.x), y: v.y + t * (w.y - v.y) };
+}
+
+function drawAdeptusCharacter(owner) {
+  // Adeptus keeps the standard arena-ball silhouette.
+  // Her character identity comes entirely from a living Cryo aura around the orb.
+  const r = owner.radius;
+  const t = Date.now() * 0.001;
+  const charge1 = owner.adeptusState === "charge1";
+  const charge2 = owner.adeptusState === "charge2";
+  const lotus = !!(owner.adeptusLotus && owner.adeptusLotus.life > 0);
+  const ult = !!owner.isUltActive;
+  const intensity = ult ? 1.35 : charge2 ? 1.20 : charge1 ? 1.08 : lotus ? 1.0 : 0.82;
+
+  ctx.save();
+  ctx.translate(Math.round(owner.x), Math.round(owner.y));
+  ctx.globalCompositeOperation = "lighter";
+  ctx.imageSmoothingEnabled = false;
+
+  // 1) Soft Cryo aura: the main visual signature.
+  const breathe = 1 + Math.sin(t * 3.2) * 0.055;
+  const haloR = (r + 10 + Math.sin(t * 2.2) * 2) * intensity;
+  const grad = ctx.createRadialGradient(0, 0, r * 0.7, 0, 0, haloR * 1.55);
+  grad.addColorStop(0, "rgba(231,250,255,0.34)");
+  grad.addColorStop(0.30, "rgba(174,228,255,0.22)");
+  grad.addColorStop(0.68, "rgba(124,203,255,0.10)");
+  grad.addColorStop(1, "rgba(124,203,255,0)");
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(0, 0, haloR * 1.55, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 2) Thin rotating Cryo ring, like a signature aura rather than a character body.
+  ctx.save();
+  ctx.rotate(t * (ult ? 1.9 : 0.8));
+  ctx.strokeStyle = `rgba(191,234,255,${0.42 * intensity})`;
+  ctx.shadowColor = "#7CCBFF";
+  ctx.shadowBlur = 10;
+  ctx.lineWidth = charge2 || ult ? 2.2 : 1.5;
+  ctx.setLineDash(charge2 || ult ? [8, 5] : [5, 7]);
+  ctx.beginPath();
+  ctx.arc(0, 0, haloR * 0.98, -0.25, Math.PI * 1.55);
+  ctx.stroke();
+  ctx.restore();
+
+  // 3) Six small ice shards orbit the white orb.
+  const shardCount = ult ? 10 : charge2 ? 8 : 6;
+  const orbit = (r + 8 + Math.sin(t * 2.6) * 2) * (charge1 ? 1.06 : 1);
+  for (let i = 0; i < shardCount; i++) {
+    const a = t * (i % 2 ? -0.72 : 0.55) + i * Math.PI * 2 / shardCount;
+    const rr = orbit + Math.sin(t * 3 + i * 1.7) * 2.5;
+    const px = Math.cos(a) * rr;
+    const py = Math.sin(a) * rr;
+    const rot = a + Math.PI / 2;
+    const sz = ult ? 5 : charge2 ? 4.5 : 3.7;
+
+    ctx.save();
+    ctx.translate(Math.round(px), Math.round(py));
+    ctx.rotate(rot);
+    ctx.shadowColor = "#7CCBFF";
+    ctx.shadowBlur = ult || charge2 ? 12 : 7;
+    ctx.fillStyle = i % 2 ? "#BFEAFF" : "#E8FAFF";
+    ctx.strokeStyle = "#6EBEFF";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, -sz);
+    ctx.lineTo(sz * 0.55, 0);
+    ctx.lineTo(0, sz * 0.95);
+    ctx.lineTo(-sz * 0.55, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // 4) Tiny snow motes continuously drift around Adeptus.
+  const moteCount = ult ? 16 : 9;
+  for (let i = 0; i < moteCount; i++) {
+    const a = t * (0.18 + (i % 3) * 0.06) + i * 2.399;
+    const rr = r + 13 + ((i * 11) % 13);
+    const px = Math.cos(a) * rr;
+    const py = Math.sin(a * 1.13) * rr * 0.72;
+    const s = (i % 3 === 0 ? 2.2 : 1.35) * (ult ? 1.15 : 1);
+    ctx.fillStyle = i % 2 ? "rgba(191,234,255,.90)" : "rgba(232,250,255,.82)";
+    ctx.fillRect(Math.round(px), Math.round(py), Math.ceil(s), Math.ceil(s));
+  }
+
+  // 5) Charge/ultimate focus: extra crystalline halo around the orb.
+  if (charge1 || charge2 || ult) {
+    ctx.save();
+    ctx.rotate(-t * (charge2 || ult ? 1.4 : 0.75));
+    ctx.strokeStyle = charge2 || ult ? "rgba(232,250,255,.88)" : "rgba(174,228,255,.68)";
+    ctx.shadowColor = "#7CCBFF";
+    ctx.shadowBlur = charge2 || ult ? 17 : 10;
+    ctx.lineWidth = charge2 || ult ? 2 : 1.4;
+    ctx.beginPath();
+    ctx.arc(0, 0, (r + 6) * breathe, 0, Math.PI * 2);
+    ctx.stroke();
+
+    if (charge2 || ult) {
+      // Four larger crystal petals make Stage 2 / Celestial Shower instantly readable.
+      for (let i = 0; i < 4; i++) {
+        const a = i * Math.PI / 2 + t * 0.55;
+        const px = Math.cos(a) * (r + 13);
+        const py = Math.sin(a) * (r + 13);
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(a + Math.PI / 2);
+        ctx.fillStyle = "rgba(191,234,255,.92)";
+        ctx.beginPath();
+        ctx.moveTo(0, -6);
+        ctx.lineTo(3, 0);
+        ctx.lineTo(0, 6);
+        ctx.lineTo(-3, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+  }
+
+  // 6) A small Cryo insignia glows just outside the top of the orb.
+  // Still no body/face/accessories: only an elemental symbol.
+  const iconA = -Math.PI / 2 + Math.sin(t * 2.0) * 0.04;
+  const ix = Math.cos(iconA) * (r + 8);
+  const iy = Math.sin(iconA) * (r + 8);
+  ctx.save();
+  ctx.translate(ix, iy);
+  ctx.rotate(iconA + Math.PI / 2);
+  ctx.fillStyle = "rgba(232,250,255,.92)";
+  ctx.strokeStyle = "#7CCBFF";
+  ctx.shadowColor = "#7CCBFF";
+  ctx.shadowBlur = 8;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, -4);
+  ctx.lineTo(3.5, 0);
+  ctx.lineTo(0, 4);
+  ctx.lineTo(-3.5, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.restore();
+}
+
+function drawAdeptusBow(x, y, angle, scale = 1) {
+  ctx.save();
+  ctx.translate(Math.round(x), Math.round(y));
+  ctx.rotate(angle);
+  ctx.scale(scale, scale);
+  ctx.imageSmoothingEnabled = false;
+
+  const active = scale > 1.02;
+  ctx.globalCompositeOperation = "lighter";
+  ctx.shadowColor = "#7CCBFF";
+  ctx.shadowBlur = active ? 18 : 10;
+
+  // Crystal bow limbs.
+  ctx.strokeStyle = "#4E8FB7";
+  ctx.lineWidth = 7;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.arc(8, 0, 30, -1.20, 1.20);
+  ctx.stroke();
+  ctx.strokeStyle = active ? "#DDF8FF" : "#AEE4FF";
+  ctx.lineWidth = 3.2;
+  ctx.beginPath();
+  ctx.arc(8, 0, 30, -1.20, 1.20);
+  ctx.stroke();
+
+  // Bowstring and arrow line.
+  ctx.strokeStyle = "rgba(232,250,255,.95)";
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(15, -28); ctx.lineTo(15, 28); ctx.stroke();
+  ctx.strokeStyle = "#C8F0FF";
+  ctx.lineWidth = active ? 3 : 2;
+  ctx.beginPath(); ctx.moveTo(-3, 0); ctx.lineTo(40, 0); ctx.stroke();
+
+  // Pixel crystal grip / notch.
+  ctx.fillStyle = "#7CCBFF";
+  ctx.fillRect(8, -5, 7, 10);
+  ctx.fillStyle = "#F4FCFF";
+  ctx.fillRect(10, -2, 3, 4);
+
+  if (active) {
+    ctx.strokeStyle = "rgba(191,234,255,.55)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(22, -8); ctx.lineTo(30, 0); ctx.lineTo(22, 8); ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawKinichAjaw(x, y, scale = 1, rotation = 0) {
@@ -4694,7 +5773,6 @@ function getCharSpecificStats(p) {
       lines.push(`Skill: ${p.kinichSkillCD <= 0 ? "READY" : (p.kinichSkillCD / 60).toFixed(1) + "s"}`);
       lines.push(`Mode: ${p.kinichAjawMode ? "AJAW FIELD" : "CLAYMORE"}`);
       lines.push(`Field: ${p.kinichField ? Math.ceil(p.kinichField.life / 60) + "s" : "-"}`);
-      if (p.kinichChargeTimer > 0) lines.push(`Spiker: CHARGING`);
       if (p.isUltActive) {
         const phaseLabel = p.kinichUltPhase === "windup" ? "AJAW DESCENDS" : p.kinichUltPhase === "barrage" ? `AJAW BARRAGE ${p.kinichUltShots}/20` : p.kinichUltPhase === "laserCharge" ? "LASER CHARGING" : "AJAW LASER";
         lines.push(`Ult: ${phaseLabel}`);
@@ -4755,7 +5833,6 @@ function getCharSpecificStats(p) {
       lines.push(`Sword Dmg: ${p.damage.toFixed(1)}`);
       lines.push(`Atk Spd: ${p.atkSpeed.toFixed(2)}x`);
       lines.push(`Portals: ${(p.tyrantPortalSlots ? p.tyrantPortalSlots.size : 0)}/36`);
-      lines.push(`Ult Hits: +50 per hit`);
       break;
     case "Valkyrie":
       lines.push(`Sword Dmg: ${p.damage.toFixed(1)}`);
@@ -4766,6 +5843,12 @@ function getCharSpecificStats(p) {
       lines.push(`Permanent Papilio: +${p.funeralPermanentBonusDamage.toFixed(2)} DMG`);
       lines.push(`Paramita: ${p.hp < 25 ? "CRITICAL" : p.hp <= 50 ? "ACTIVE" : "NORMAL"}`);
       lines.push(`Charge Attack: ${p.funeralChargeAttackCD > 0 ? (p.funeralChargeAttackCD / 60).toFixed(1) + "s" : "READY"}`);
+      break;
+    case "Adeptus":
+      lines.push(`Bow Dmg: ${p.damage.toFixed(1)}`);
+      lines.push(`Undivided Heart: ${p.adeptusHeartStacks}/3`);
+      lines.push(`Ice Lotus: ${p.adeptusSkillCD <= 0 ? "READY" : (p.adeptusSkillCD / 60).toFixed(1) + "s"}`);
+      if (p.isUltActive) lines.push(`Ult: SHOWER ${Math.ceil(p.adeptusUltTimer / 60)}s`);
       break;
     default:
       lines.push(`Dmg: ${p.damage.toFixed(2)}`);
@@ -4778,8 +5861,8 @@ function getCharSpecificStats(p) {
 }
 
 function updateUI() {
-  let p1 = balls.find((b) => b.team === 1 && !b.isClone),
-    p2 = balls.find((b) => b.team === 2 && !b.isClone);
+  let p1 = balls.find((b) => b.team === 1 && !b.isClone && !b.isAdeptusLotus),
+    p2 = balls.find((b) => b.team === 2 && !b.isClone && !b.isAdeptusLotus);
   if (p1) {
     const p1Pct = p1.name === "Funeral"
       ? (1 - p1.funeralUltCooldown / Math.max(1, p1.funeralUltCooldownMax || p1.funeralUltMax)) * 100
@@ -4861,6 +5944,12 @@ function gameLoop() {
     if (kinichSkills[i].life <= 0) kinichSkills.splice(i, 1);
   }
 
+  for (let i = adeptusSkills.length - 1; i >= 0; i--) {
+    if (gameState === "playing") adeptusSkills[i].update();
+    adeptusSkills[i].draw();
+    if (adeptusSkills[i].life <= 0) adeptusSkills.splice(i, 1);
+  }
+
   for (let i = scatteredSwords.length - 1; i >= 0; i--) {
     if (gameState === "playing") scatteredSwords[i].update();
     scatteredSwords[i].draw();
@@ -4932,6 +6021,8 @@ function gameLoop() {
       const t = 1 - ef.life / ef.maxLife;
       const fade = ef.life / ef.maxLife;
       const ease = Math.sin(Math.min(1, t) * Math.PI * 0.5);
+      const copy=!!ef.copycat;
+      const main=copy?"#FF76CE":"#ff513f", accent=copy?"#FFD9F2":"#ff8a62", dark=copy?"#8E2E72":"#650b18";
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
       ctx.translate(ef.x, ef.y);
@@ -4939,12 +6030,12 @@ function gameLoop() {
 
       // Expanding pyro aura like a real transformation, not just a static ring.
       const r = 16 + ease * 54;
-      ctx.shadowColor = "#ff513f"; ctx.shadowBlur = 28;
-      ctx.fillStyle = "rgba(198,40,56,0.24)";
+      ctx.shadowColor = main; ctx.shadowBlur = 28;
+      ctx.fillStyle = copy?"rgba(255,118,206,0.24)":"rgba(198,40,56,0.24)";
       ctx.beginPath(); ctx.arc(0, 0, r * 0.72, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = "#ff8a62"; ctx.lineWidth = 5;
+      ctx.strokeStyle = accent; ctx.lineWidth = 5;
       ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
-      ctx.strokeStyle = "rgba(255,216,151,0.75)"; ctx.lineWidth = 2;
+      ctx.strokeStyle = copy?"rgba(255,217,242,0.80)":"rgba(255,216,151,0.75)"; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(0, 0, r * 0.72, 0, Math.PI * 2); ctx.stroke();
 
       // Eight large butterflies bursting outward.
@@ -4955,15 +6046,15 @@ function gameLoop() {
         const by = Math.sin(a) * rr;
         const sc = 0.7 + ease * 0.55;
         ctx.save(); ctx.translate(bx, by); ctx.rotate(a + Math.PI / 2); ctx.scale(sc, sc);
-        ctx.fillStyle = i % 2 ? "#ff7b55" : "#ffbd7a";
-        ctx.shadowColor = "#ff563f"; ctx.shadowBlur = 13;
+        ctx.fillStyle = copy ? (i % 2 ? "#FF76CE" : "#FFD9F2") : (i % 2 ? "#ff7b55" : "#ffbd7a");
+        ctx.shadowColor = main; ctx.shadowBlur = 13;
         ctx.beginPath(); ctx.ellipse(-5, 0, 5, 10, -0.38, 0, Math.PI * 2); ctx.ellipse(5, 0, 5, 10, 0.38, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = "#650b18"; ctx.beginPath(); ctx.arc(0, 1, 2.1, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = dark; ctx.beginPath(); ctx.arc(0, 1, 2.1, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
       }
 
       // Central blossom-shaped flare.
-      ctx.fillStyle = "rgba(255,109,77,0.82)"; ctx.shadowBlur = 24;
+      ctx.fillStyle = copy?"rgba(255,118,206,0.82)":"rgba(255,109,77,0.82)"; ctx.shadowBlur = 24;
       for (let i = 0; i < 6; i++) {
         const a = i * Math.PI / 3;
         ctx.save(); ctx.rotate(a);
@@ -4977,15 +6068,15 @@ function gameLoop() {
       const fade = 1 - t;
       ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.translate(ef.x, ef.y);
       const r = 18 + t * 92;
-      ctx.globalAlpha = fade; ctx.shadowColor = "#ff553f"; ctx.shadowBlur = 26;
-      ctx.strokeStyle = "#ff7043"; ctx.lineWidth = 8;
+      ctx.globalAlpha = fade; ctx.shadowColor = ef.copycat?"#FF76CE":"#ff553f"; ctx.shadowBlur = 26;
+      ctx.strokeStyle = ef.copycat?"#FF76CE":"#ff7043"; ctx.lineWidth = 8;
       ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
-      ctx.strokeStyle = "rgba(255,210,145,0.9)"; ctx.lineWidth = 2;
+      ctx.strokeStyle = ef.copycat?"rgba(255,217,242,0.9)":"rgba(255,210,145,0.9)"; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(0, 0, r * 0.58, 0, Math.PI * 2); ctx.stroke();
       for (let i = 0; i < 14; i++) {
         const a = (i * Math.PI * 2) / 14 + t * 5;
         const rr = r * (0.7 + (i % 4) * 0.06);
-        ctx.save(); ctx.rotate(a); ctx.fillStyle = i % 2 ? "#ffb36b" : "#d83a3f";
+        ctx.save(); ctx.rotate(a); ctx.fillStyle = ef.copycat ? (i % 2 ? "#FFD9F2" : "#FF76CE") : (i % 2 ? "#ffb36b" : "#d83a3f");
         ctx.beginPath(); ctx.ellipse(rr, 0, 3.2, 7, 0, 0, Math.PI * 2); ctx.ellipse(rr - 6, 0, 3.2, 7, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
       }
       ctx.restore(); ef.life--;
@@ -5097,9 +6188,9 @@ function gameLoop() {
 
       // Large wind-up aura / funeral flame core.
       ctx.globalAlpha = 0.20 + windup * 0.30;
-      ctx.shadowColor = "#ff4937";
+      ctx.shadowColor = ef.copycat?"#FF76CE":"#ff4937";
       ctx.shadowBlur = 42;
-      ctx.fillStyle = "#8f1725";
+      ctx.fillStyle = ef.copycat?"#8E2E72":"#8f1725";
       ctx.beginPath();
       ctx.arc(ef.x, ef.y, 34 + windup * 52, 0, Math.PI * 2);
       ctx.fill();
@@ -5182,7 +6273,7 @@ function gameLoop() {
         ctx.stroke();
 
         // Long Pyro tails.
-        ctx.strokeStyle = "#ff7043";
+        ctx.strokeStyle = ef.copycat?"#FF76CE":"#ff7043";
         ctx.lineWidth = 11;
         ctx.lineCap = "round";
         ctx.beginPath();
@@ -5223,7 +6314,7 @@ function gameLoop() {
         ctx.translate(ef.impactX, ef.impactY);
         ctx.shadowColor = "#ff4d3d";
         ctx.shadowBlur = 34;
-        ctx.strokeStyle = "#ff7043";
+        ctx.strokeStyle = ef.copycat?"#FF76CE":"#ff7043";
         ctx.lineWidth = 11;
         ctx.beginPath();
         ctx.arc(0, 0, 28 + impactT * 88, -Math.PI * 0.95, Math.PI * 0.95);
@@ -5255,14 +6346,14 @@ function gameLoop() {
       const fade = ef.life / ef.maxLife;
       ctx.save();
       ctx.globalAlpha = fade;
-      ctx.shadowColor = "#ff4d3d";
+      ctx.shadowColor = ef.copycat ? "#FF76CE" : "#ff4d3d";
       ctx.shadowBlur = 14;
       for (let i = 0; i < 5; i++) {
         const a = (i / 5) * Math.PI * 2 + t * 4;
         const rr = 8 + i * 3;
         const fx = ef.x + Math.cos(a) * rr;
         const fy = ef.y + Math.sin(a) * rr - t * 8;
-        ctx.fillStyle = i % 2 ? "#ffb36b" : "#ff553f";
+        ctx.fillStyle = ef.copycat ? (i % 2 ? "#FFD9F2" : "#FF76CE") : (i % 2 ? "#ffb36b" : "#ff553f");
         ctx.beginPath();
         ctx.ellipse(fx, fy, 2.5, 5 + t * 2, a, 0, Math.PI * 2);
         ctx.fill();
@@ -5364,9 +6455,9 @@ function gameLoop() {
       const r = 12 + t * 52;
       ctx.save();
       ctx.globalAlpha = Math.max(0, ef.life / ef.maxLife);
-      ctx.strokeStyle = "#c0392b";
+      ctx.strokeStyle = ef.copycat ? "#FF76CE" : "#c0392b";
       ctx.lineWidth = 3;
-      ctx.shadowColor = "#ff553f";
+      ctx.shadowColor = ef.copycat ? "#FF76CE" : "#ff553f";
       ctx.shadowBlur = 14;
       ctx.beginPath();
       ctx.arc(ef.x, ef.y, r, 0, Math.PI * 2);
@@ -5377,9 +6468,9 @@ function gameLoop() {
       const t = ef.life / ef.maxLife;
       ctx.save();
       ctx.globalAlpha = t;
-      ctx.strokeStyle = "#ff6b52";
+      ctx.strokeStyle = ef.copycat ? "#FFD9F2" : "#ff6b52";
       ctx.lineWidth = 2;
-      ctx.shadowColor = "#ff553f";
+      ctx.shadowColor = ef.copycat ? "#FF76CE" : "#ff553f";
       ctx.shadowBlur = 10;
       ctx.beginPath();
       ctx.arc(ef.x, ef.y, 18 + (1 - t) * 12, 0, Math.PI * 2);
@@ -5563,6 +6654,157 @@ function gameLoop() {
       ctx.lineWidth = 4;
       ctx.stroke();
       ef.life--;
+    } else if (ef.type === "adeptus_charge") {
+      const t = 1 - ef.life / ef.maxLife;
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.25 + 0.75 * (1 - t);
+      ctx.strokeStyle = "#BFEAFF";
+      ctx.shadowColor = "#7CCBFF";
+      ctx.shadowBlur = 14;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(ef.x, ef.y, 18 + t * 30, 0, Math.PI * 2);
+      ctx.stroke();
+      for (let i = 0; i < 6; i++) {
+        const a = i * Math.PI / 3 + t * 4;
+        const r1 = 14 + t * 8, r2 = 28 + t * 28;
+        ctx.beginPath();
+        ctx.moveTo(ef.x + Math.cos(a) * r1, ef.y + Math.sin(a) * r1);
+        ctx.lineTo(ef.x + Math.cos(a) * r2, ef.y + Math.sin(a) * r2);
+        ctx.stroke();
+      }
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "adeptus_frostflake_cast") {
+      const t = 1 - ef.life / ef.maxLife;
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 1 - t;
+      ctx.strokeStyle = "#DDF8FF";
+      ctx.shadowColor = "#7CCBFF";
+      ctx.shadowBlur = 18;
+      ctx.lineWidth = 5;
+      for (let i = 0; i < 6; i++) {
+        const a = i * Math.PI / 3;
+        ctx.beginPath();
+        ctx.moveTo(ef.x, ef.y);
+        ctx.lineTo(ef.x + Math.cos(a) * (18 + t * 42), ef.y + Math.sin(a) * (18 + t * 42));
+        ctx.stroke();
+      }
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "adeptus_arrow_hit") {
+      const t = 1 - ef.life / ef.maxLife;
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 1 - t;
+      ctx.strokeStyle = "#BFEAFF";
+      ctx.shadowColor = "#7CCBFF";
+      ctx.shadowBlur = 10;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(ef.x, ef.y, 8 + t * 20, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "adeptus_frostflake_hit") {
+      const t = 1 - ef.life / ef.maxLife;
+      const r = 12 + t * (ef.radius || 56);
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 1 - t;
+      ctx.strokeStyle = "#DDF8FF";
+      ctx.shadowColor = "#7CCBFF";
+      ctx.shadowBlur = 20;
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(ef.x, ef.y, r, 0, Math.PI * 2); ctx.stroke();
+      for (let i = 0; i < 6; i++) {
+        const a = i * Math.PI / 3;
+        ctx.beginPath();
+        ctx.moveTo(ef.x + Math.cos(a) * 6, ef.y + Math.sin(a) * 6);
+        ctx.lineTo(ef.x + Math.cos(a) * r, ef.y + Math.sin(a) * r);
+        ctx.stroke();
+      }
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "adeptus_dash") {
+      const t = 1 - ef.life / ef.maxLife;
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 1 - t;
+      ctx.strokeStyle = "#BFEAFF";
+      ctx.shadowColor = "#7CCBFF";
+      ctx.shadowBlur = 15;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(ef.x, ef.y);
+      ctx.lineTo(ef.endX, ef.endY);
+      ctx.stroke();
+      for (let i = 0; i < 5; i++) {
+        const q = Math.max(0, t - i * 0.08);
+        const px = ef.x + (ef.endX - ef.x) * q;
+        const py = ef.y + (ef.endY - ef.y) * q;
+        ctx.fillStyle = i % 2 ? "#DDF8FF" : "#7CCBFF";
+        ctx.fillRect(px - 2, py - 2, 4, 4);
+      }
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "adeptus_lotus_explode") {
+      const t = 1 - ef.life / ef.maxLife;
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 1 - t;
+      ctx.strokeStyle = "#DDF8FF";
+      ctx.shadowColor = "#7CCBFF";
+      ctx.shadowBlur = 22;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(ef.x, ef.y, 18 + t * 74, 0, Math.PI * 2);
+      ctx.stroke();
+      for (let i = 0; i < 8; i++) {
+        const a = i * Math.PI / 4;
+        ctx.beginPath();
+        ctx.moveTo(ef.x + Math.cos(a) * 12, ef.y + Math.sin(a) * 12);
+        ctx.lineTo(ef.x + Math.cos(a) * (34 + t * 48), ef.y + Math.sin(a) * (34 + t * 48));
+        ctx.stroke();
+      }
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "adeptus_icicle_hit") {
+      const t = 1 - ef.life / ef.maxLife;
+      const radius = ef.radius || 34;
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 1 - t;
+      ctx.strokeStyle = ef.final ? "#F4FCFF" : "#AEE4FF";
+      ctx.shadowColor = "#7CCBFF";
+      ctx.shadowBlur = ef.final ? 30 : 14;
+      ctx.lineWidth = ef.final ? 7 : 3;
+      ctx.beginPath(); ctx.arc(ef.x, ef.y, 8 + t * radius, 0, Math.PI * 2); ctx.stroke();
+      if (ef.final) {
+        for (let i = 0; i < 12; i++) {
+          const a = i * Math.PI / 6;
+          ctx.beginPath();
+          ctx.moveTo(ef.x + Math.cos(a) * 16, ef.y + Math.sin(a) * 16);
+          ctx.lineTo(ef.x + Math.cos(a) * (40 + t * 70), ef.y + Math.sin(a) * (40 + t * 70));
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "adeptus_shower_final") {
+      const t = 1 - ef.life / ef.maxLife;
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.12 + 0.88 * (1 - t);
+      ctx.strokeStyle = "#DDF8FF";
+      ctx.shadowColor = "#7CCBFF";
+      ctx.shadowBlur = 26;
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(ef.x, ef.y, 22 + t * 98, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+      ef.life--;
     } else if (ef.type === "kinich_skill_cast") {const t=1-ef.life/ef.maxLife;ctx.save();ctx.globalCompositeOperation="lighter";ctx.globalAlpha=1-t;ctx.strokeStyle="#5F8B62";ctx.shadowColor="#5F8B62";ctx.shadowBlur=0;ctx.lineWidth=3;ctx.setLineDash([5,5]);ctx.beginPath();ctx.arc(ef.x,ef.y,18+t*18,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);ctx.restore();ef.life--;
     } else if (ef.type === "kinich_charge_start") {const t=1-ef.life/ef.maxLife;ctx.save();ctx.globalCompositeOperation="lighter";ctx.translate(ef.x,ef.y);ctx.rotate(t*3);ctx.strokeStyle="#C49A4A";ctx.shadowColor="#C49A4A";ctx.shadowBlur=0;ctx.lineWidth=3;ctx.beginPath();ctx.arc(0,0,16+t*30,0,Math.PI*1.7);ctx.stroke();ctx.restore();ef.life--;
     } else if (ef.type === "kinich_charge_fire") {const t=1-ef.life/ef.maxLife;ctx.save();ctx.globalCompositeOperation="lighter";ctx.globalAlpha=1-t;ctx.strokeStyle="#C49A4A";ctx.shadowColor="#C49A4A";ctx.shadowBlur=0;ctx.lineWidth=5;ctx.strokeRect(ef.x-18,ef.y-18,36,36);ctx.strokeStyle="#8BAE66";ctx.lineWidth=2;ctx.strokeRect(ef.x-11,ef.y-11,22,22);ctx.restore();ef.life--;
@@ -5634,8 +6876,8 @@ function gameLoop() {
 
   updateUI();
   if (gameState === "playing") {
-    let team1Alive = balls.some((b) => b.team === 1);
-    let team2Alive = balls.some((b) => b.team === 2);
+    let team1Alive = balls.some((b) => b.team === 1 && !b.isAdeptusLotus);
+    let team2Alive = balls.some((b) => b.team === 2 && !b.isAdeptusLotus);
     if (!team1Alive || !team2Alive) {
       gameState = "over";
       let winner = team1Alive ? p1Choice : p2Choice;
@@ -5663,6 +6905,7 @@ function resetToMenu() {
   });
   projectiles = [];
   kinichSkills = [];
+  adeptusSkills = [];
   bloodchainSkills = [];
   infinitySkills = [];
   soundTraps = [];
@@ -5687,7 +6930,56 @@ function drawThumbnail(canvasEl, charName) {
   tCtx.strokeStyle = stats.color;
   tCtx.stroke();
 
-  if (charName === "Kinich") { tCtx.save(); tCtx.globalCompositeOperation="source-over"; tCtx.strokeStyle="rgba(95,139,98,.78)"; tCtx.lineWidth=2; tCtx.beginPath(); tCtx.arc(w/2,h/2,w*.40,0,Math.PI*2); tCtx.stroke(); tCtx.translate(w/2,h/2); tCtx.rotate(.45); tCtx.imageSmoothingEnabled=false; tCtx.fillStyle="#203A34"; tCtx.fillRect(-14,-5,28,10); tCtx.fillStyle="#5F8B62"; tCtx.fillRect(-10,-3,22,6); tCtx.fillStyle="#C49A4A"; tCtx.fillRect(7,-2,4,4); tCtx.restore();
+  if (charName === "Adeptus") {
+    const cx = w / 2, cy = h / 2;
+    tCtx.save();
+    tCtx.translate(cx, cy);
+    tCtx.imageSmoothingEnabled = false;
+
+    // Keep the same white-ball silhouette as the rest of the roster.
+    const pulse = 1 + Math.sin(Date.now() * 0.006) * 0.05;
+    tCtx.globalCompositeOperation = "lighter";
+    tCtx.strokeStyle = "rgba(124,203,255,.72)";
+    tCtx.shadowColor = "#7CCBFF";
+    tCtx.shadowBlur = 10;
+    tCtx.lineWidth = 2;
+    tCtx.setLineDash([4, 3]);
+    tCtx.beginPath();
+    tCtx.arc(0, 0, w * 0.42 * pulse, 0, Math.PI * 2);
+    tCtx.stroke();
+    tCtx.setLineDash([]);
+
+    // Cryo shards / aura petals.
+    for (let i = 0; i < 6; i++) {
+      const a = i * Math.PI / 3 + Date.now() * 0.0006;
+      const rr = w * 0.43;
+      const px = Math.cos(a) * rr, py = Math.sin(a) * rr;
+      tCtx.save();
+      tCtx.translate(px, py);
+      tCtx.rotate(a + Math.PI / 2);
+      tCtx.fillStyle = i % 2 ? "#BFEAFF" : "#E8FAFF";
+      tCtx.strokeStyle = "#6EBEFF";
+      tCtx.lineWidth = 1;
+      tCtx.beginPath();
+      tCtx.moveTo(0, -4); tCtx.lineTo(3, 0); tCtx.lineTo(0, 4); tCtx.lineTo(-3, 0);
+      tCtx.closePath();
+      tCtx.fill(); tCtx.stroke();
+      tCtx.restore();
+    }
+
+    // Signature bow remains, because the character is still an archer.
+    tCtx.strokeStyle = "#4E8FB7";
+    tCtx.shadowColor = "#7CCBFF";
+    tCtx.shadowBlur = 6;
+    tCtx.lineWidth = 3;
+    tCtx.beginPath(); tCtx.arc(10, 0, 20, -1.18, 1.18); tCtx.stroke();
+    tCtx.strokeStyle = "#E8FAFF";
+    tCtx.lineWidth = 1.4;
+    tCtx.beginPath(); tCtx.moveTo(18, -19); tCtx.lineTo(18, 19); tCtx.stroke();
+    tCtx.beginPath(); tCtx.moveTo(-2, 0); tCtx.lineTo(29, 0); tCtx.stroke();
+
+    tCtx.restore();
+  } else if (charName === "Kinich") { tCtx.save(); tCtx.globalCompositeOperation="source-over"; tCtx.strokeStyle="rgba(95,139,98,.78)"; tCtx.lineWidth=2; tCtx.beginPath(); tCtx.arc(w/2,h/2,w*.40,0,Math.PI*2); tCtx.stroke(); tCtx.translate(w/2,h/2); tCtx.rotate(.45); tCtx.imageSmoothingEnabled=false; tCtx.fillStyle="#203A34"; tCtx.fillRect(-14,-5,28,10); tCtx.fillStyle="#5F8B62"; tCtx.fillRect(-10,-3,22,6); tCtx.fillStyle="#C49A4A"; tCtx.fillRect(7,-2,4,4); tCtx.restore();
   } else if (stats.weapons > 0) {
     const ang = 0.4;
     const cx = w / 2, cy = h / 2;
@@ -5796,6 +7088,7 @@ function setupGame() {
   balls = [];
   projectiles = [];
   kinichSkills = [];
+  adeptusSkills = [];
   bloodchainSkills = [];
   infinitySkills = [];
   soundTraps = [];
