@@ -269,7 +269,7 @@ const characterDB = {
     ultName: "BOOMSHAKALAKA",
     ultColor: "#8BAE66",
     desc: "Claymore, Canopy Grapple, Nightsoul Field & Ajaw",
-    ultMax: 3500,
+    ultMax: 5000,
   },
   "Funeral": {
     color: "#8f1725",
@@ -284,6 +284,20 @@ const characterDB = {
     ultColor: "#8f1725",
     desc: "Wangsheng Funeral Parlor",
     ultMax: 900,
+  },
+  Yaksha: {
+    color: "#4E7A63",
+    hp: 100,
+    damage: 2.0,
+    speed: 3.1,
+    weapons: 1,
+    wLen: 68,
+    wWidth: 10,
+    rotSpeed: 0.035,
+    ultName: "BANE OF ALL EVIL",
+    ultColor: "#4E7A63",
+    desc: "Jade Polearm, Yaksha Dash & Plunging Burst",
+    ultMax: 3000,
   },
   Adeptus: {
     color: "#8FD3FF",
@@ -2494,6 +2508,34 @@ class Ball {
     this.funeralChargeAttackHit = false;
     this.funeralChargeAttackAngle = 0;
 
+    // Yaksha
+    this.yakshaPassiveStacks = 0;
+    this.yakshaPassiveTimer = 0;
+    this.yakshaSkillCD = 0;
+    this.yakshaDashState = "idle"; // idle, dash, pause
+    this.yakshaDashIndex = 0;
+    this.yakshaDashTimer = 0;
+    this.yakshaDashPauseTimer = 0;
+    this.yakshaDashStartX = this.x;
+    this.yakshaDashStartY = this.y;
+    this.yakshaDashEndX = this.x;
+    this.yakshaDashEndY = this.y;
+    this.yakshaDashTarget = null;
+    this.yakshaDashHit = false;
+    this.yakshaDashHitTargets = new Set();
+    this.yakshaDashAngle = 0;
+    this.yakshaDashLastX = this.x;
+    this.yakshaDashLastY = this.y;
+    this.yakshaUltPhase = "ready"; // ready, charge, active
+    this.yakshaUltChargeTimer = 0;
+    this.yakshaUltTimer = 0;
+    this.yakshaPlungeCD = 0;
+    this.yakshaPlungeState = "idle"; // idle, windup
+    this.yakshaPlungeTimer = 0;
+    this.yakshaPlungeTarget = null;
+    this.yakshaPlungeX = this.x;
+    this.yakshaPlungeY = this.y;
+
     // Adeptus
     // Deliberate archer cadence: slower basic fire rate, with a longer wind-up
     // so Frostflake shots feel powerful rather than machine-gun fast.
@@ -2646,6 +2688,7 @@ class Ball {
     let segs = [];
     if (this.weapons === 0) return segs;
     if (this.name === "Kinich" && this.kinichAjawMode) return segs;
+    if (this.name === "Yaksha" && (this.yakshaDashState !== "idle" || this.yakshaPlungeState !== "idle")) return segs;
 
     if (this.name === "Bloodchain" && this.bloodchainBankai) {
       let ang = this.angle;
@@ -3223,6 +3266,10 @@ class Ball {
           ctx.restore();
           return;
         }
+        if (this.name === "Yaksha") {
+          drawPrimordialJade(seg, this);
+          return;
+        }
         if (this.name === "Funeral") {
           const dx = seg.p2.x - seg.p1.x, dy = seg.p2.y - seg.p1.y;
           const len = Math.hypot(dx, dy) || 1;
@@ -3327,6 +3374,17 @@ class Ball {
           ctx.fill();
         }
       });
+
+      if (this.name === "Yaksha" && (this.yakshaDashState !== "idle" || this.yakshaPlungeState !== "idle")) {
+        drawPrimordialJade({
+          p1: { x: this.x - Math.cos(this.angle) * 12, y: this.y - Math.sin(this.angle) * 12 },
+          p2: { x: this.x + Math.cos(this.angle) * (this.radius + (this.isUltActive ? this.wLen * 1.35 : this.wLen)), y: this.y + Math.sin(this.angle) * (this.radius + (this.isUltActive ? this.wLen * 1.35 : this.wLen)) }
+        }, this);
+      }
+    }
+
+    if (this.name === "Yaksha") {
+      drawYakshaAura(this);
     }
 
     if (this.iFrames > 0 && Math.floor(this.iFrames / 3) % 2 === 0) ctx.fillStyle = "#ffaaaa";
@@ -3341,6 +3399,7 @@ class Ball {
       ? (this.bloodchainBankai ? "#b11226" : "#ffffff")
       : this.color;
     ctx.stroke();
+    if (this.name === "Yaksha" && this.isUltActive) drawYakshaMask(this);
     if (this.name === "Adeptus") drawAdeptusCharacter(this);
     if (this.kinichMarkedBy && this.kinichMarkedBy.hp > 0 && this.kinichMarkedBy.team !== this.team) {
       ctx.save();
@@ -4186,7 +4245,6 @@ class Ball {
 
         if (this.kinichUltPhase === "windup") {
           this.kinichUltTimer--;
-          this.bonusText = "BOOMSHAKALAKA: AJAW DESCENDS";
           if (this.kinichUltTimer <= 0) {
             this.kinichUltPhase = "barrage";
             this.kinichUltTimer = 300;
@@ -4194,7 +4252,6 @@ class Ball {
             effects.push({ type: "kinich_ult_summon", x: canvas.width * 0.5, y: 10, life: 72, maxLife: 72 });
           }
         } else if (this.kinichUltPhase === "barrage") {
-          this.bonusText = `BOOMSHAKALAKA: AJAW BARRAGE ${this.kinichUltShots}/20`;
           this.kinichUltTimer--;
           if (this.kinichUltShots < 20 && this.kinichUltTimer % 15 === 0 && enemy && enemy.hp > 0) {
             projectiles.push(new KinichProjectile(canvas.width * 0.5, 8, enemy, this, {
@@ -4213,7 +4270,6 @@ class Ball {
             effects.push({ type: "kinich_ult_final_charge", x: canvas.width * 0.5, y: 14, life: 90, maxLife: 90, target: enemy });
           }
         } else if (this.kinichUltPhase === "laserCharge") {
-          this.bonusText = "BOOMSHAKALAKA: AJAW LASER CHARGING";
           this.kinichUltTimer--;
           if (this.kinichUltTimer <= 0) {
             this.kinichUltPhase = "laser";
@@ -4222,7 +4278,6 @@ class Ball {
             kinichSkills.push(new KinichUltLaser(this, allEnemies));
           }
         } else if (this.kinichUltPhase === "laser") {
-          this.bonusText = "BOOMSHAKALAKA: AJAW LASER";
           this.kinichUltTimer--;
           if (this.kinichUltTimer <= 0) {
             this.isUltActive = false;
@@ -4241,6 +4296,161 @@ class Ball {
         }
       }
       }
+
+    // Yaksha: mobile dash chain + transformation wind-up + HP-draining Bane of All Evil.
+    if (this.name === "Yaksha") {
+      if (this.yakshaSkillCD > 0) this.yakshaSkillCD--;
+
+      if (this.yakshaPassiveTimer > 0) {
+        this.yakshaPassiveTimer--;
+        if (this.yakshaPassiveTimer <= 0 && this.yakshaPassiveStacks > 0) {
+          this.yakshaPassiveStacks--;
+          this.yakshaPassiveTimer = this.yakshaPassiveStacks > 0 ? 180 : 0;
+        }
+      }
+
+      const yakshaBurstActive = this.isUltActive && this.yakshaUltPhase === "active";
+      this.damage = characterDB["Yaksha"].damage * (yakshaBurstActive ? 1.5 : 1);
+      this.rotSpeed = characterDB["Yaksha"].rotSpeed * (yakshaBurstActive ? 1.5 : 1);
+
+      // Short transformation pause, deliberately matching Funeral's Papilio-style wind-up.
+      if (this.isUltActive && this.yakshaUltPhase === "charge") {
+        this.vx = 0;
+        this.vy = 0;
+        this.yakshaUltChargeTimer--;
+        if (this.yakshaUltChargeTimer <= 0) {
+          this.yakshaUltPhase = "active";
+          this.yakshaUltTimer = 1800;
+          this.yakshaPlungeCD = 0;
+          this.bonusText = "";
+          const ang = Math.random() * Math.PI * 2;
+          this.vx = Math.cos(ang) * this.baseSpeed;
+          this.vy = Math.sin(ang) * this.baseSpeed;
+          effects.push({ type: "yaksha_ult_transform", x: this.x, y: this.y, life: 48, maxLife: 48 });
+        }
+      } else if (yakshaBurstActive) {
+        this.yakshaUltTimer--;
+        this.hp = Math.max(1, this.hp - 0.05);
+
+        // Bane of All Evil follows Funeral's cooldown-style ultimate logic:
+        // while the transformation is active, its meter fills again instead of
+        // being locked at zero. It can also receive extra charge from plunges.
+        this.ultCharge = Math.min(this.ultMax, this.ultCharge + 1);
+
+        if (this.yakshaPlungeCD > 0) this.yakshaPlungeCD--;
+
+        if (this.yakshaPlungeState === "windup") {
+          this.vx = 0;
+          this.vy = 0;
+          this.yakshaPlungeTimer--;
+          if (this.yakshaPlungeTimer <= 0) this.resolveYakshaPlunge();
+        } else if (this.yakshaDashState === "idle" && this.yakshaPlungeCD <= 0 && gameState === "playing") {
+          this.performYakshaPlunge();
+        }
+
+        if (this.yakshaUltTimer <= 0) {
+          this.isUltActive = false;
+          this.yakshaUltPhase = "ready";
+          this.yakshaUltChargeTimer = 0;
+          this.yakshaPlungeState = "idle";
+          this.yakshaPlungeTimer = 0;
+          this.yakshaPlungeTarget = null;
+          this.damage = characterDB["Yaksha"].damage;
+          this.rotSpeed = characterDB["Yaksha"].rotSpeed;
+          this.bonusText = "";
+          const ang = Math.random() * Math.PI * 2;
+          this.vx = Math.cos(ang) * this.baseSpeed;
+          this.vy = Math.sin(ang) * this.baseSpeed;
+        }
+      }
+
+      // Two long, piercing dashes. Each dash has a real 0.5s pause before the next one.
+      if (this.yakshaDashState === "dash") {
+        const total = 16;
+        const previousX = this.x;
+        const previousY = this.y;
+        const progress = 1 - this.yakshaDashTimer / total;
+        this.x = this.yakshaDashStartX + (this.yakshaDashEndX - this.yakshaDashStartX) * progress;
+        this.y = this.yakshaDashStartY + (this.yakshaDashEndY - this.yakshaDashStartY) * progress;
+        this.vx = 0;
+        this.vy = 0;
+
+        const target = this.yakshaDashTarget;
+        if (target && target.hp > 0 && target.team !== this.team) {
+          // Keep the Primordial Jade aimed at the enemy while the dash trajectory remains fixed.
+          this.angle = Math.atan2(target.y - this.y, target.x - this.x);
+        } else {
+          this.angle = this.yakshaDashAngle;
+        }
+
+        // Swept hitbox: the dash can pass completely through enemies instead of stopping at them.
+        const dashSegmentStart = { x: previousX, y: previousY };
+        const dashSegmentEnd = { x: this.x, y: this.y };
+        let grantedUltCharge = this.yakshaDashHit;
+        for (const enemy of balls) {
+          if (enemy === this || enemy.team === this.team || enemy.hp <= 0 || this.yakshaDashHitTargets.has(enemy)) continue;
+          const closest = getClosestPointOnSegment({ x: enemy.x, y: enemy.y }, dashSegmentStart, dashSegmentEnd);
+          const hitDist = Math.hypot(enemy.x - closest.x, enemy.y - closest.y);
+          if (hitDist <= enemy.radius + 13) {
+            const dealt = enemy.takeDamage(this.damage * 1.5, this);
+            enemy.iFrames = Math.max(enemy.iFrames, 12);
+            this.yakshaDashHitTargets.add(enemy);
+            const firstSuccessfulDashHit = dealt > 0 && !this.yakshaDashHit;
+            if (dealt > 0) this.yakshaDashHit = true;
+            if (firstSuccessfulDashHit) {
+              this.ultCharge = Math.min(this.ultMax, this.ultCharge + 500);
+              this.yakshaPassiveStacks = Math.min(5, this.yakshaPassiveStacks + 1);
+              this.yakshaPassiveTimer = 180;
+              spawnText("+500 ULT", enemy.x, enemy.y - 30, "#4A5969");
+              spawnText("YAKSHA +1", enemy.x, enemy.y - 46, "#73E6D2");
+              grantedUltCharge = true;
+            }
+            spawnText("DASH -" + dealt.toFixed(1), enemy.x, enemy.y - 16, "#427973");
+            effects.push({ type: "yaksha_dash_hit", x: enemy.x, y: enemy.y, life: 24, maxLife: 24, angle: this.yakshaDashAngle });
+          }
+        }
+
+        this.yakshaDashLastX = this.x;
+        this.yakshaDashLastY = this.y;
+        this.yakshaDashTimer--;
+        if (this.yakshaDashTimer <= 0) {
+          this.x = this.yakshaDashEndX;
+          this.y = this.yakshaDashEndY;
+          this.yakshaDashLastX = this.x;
+          this.yakshaDashLastY = this.y;
+          if (this.yakshaDashIndex === 0) {
+            this.yakshaDashState = "pause";
+            this.yakshaDashPauseTimer = 30; // 0.5s at 60 FPS
+          } else {
+            this.finishYakshaDashSequence();
+          }
+        }
+      } else if (this.yakshaDashState === "pause") {
+        this.vx = 0;
+        this.vy = 0;
+        this.yakshaDashPauseTimer--;
+        if (this.yakshaDashPauseTimer <= 0) {
+          const enemy = balls.find((b) => b.team !== this.team && b.hp > 0 && !b.isClone)
+            || balls.find((b) => b.team !== this.team && b.hp > 0);
+          if (enemy) this.startYakshaDash(enemy, 1);
+          else this.finishYakshaDashSequence();
+        }
+      } else if (
+        gameState === "playing" &&
+        !this.isClone &&
+        !this.isUltActive &&
+        this.yakshaSkillCD <= 0 &&
+        this.yakshaPlungeState === "idle"
+      ) {
+        const enemy = balls.find((b) => b.team !== this.team && b.hp > 0 && !b.isClone)
+          || balls.find((b) => b.team !== this.team && b.hp > 0);
+        if (enemy) {
+          this.yakshaSkillCD = 720;
+          this.startYakshaDash(enemy, 0);
+          spawnText("LEMNISCATIC WIND CYCLING!", this.x, this.y - 32, "#427973");
+        }
+      }
+    }
 
     if (this.stunTimer > 0) {
       this.stunTimer--;
@@ -4526,10 +4736,16 @@ class Ball {
     let currentSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
     let targetSpeed = this.baseSpeed;
     if ((!this.isUltActive && !(this.name === "Kinich" && ["aim","grapple","field"].includes(this.kinichSkillState)) &&
-         !(this.name === "Adeptus" && ["charge1","charge2","dash"].includes(this.adeptusState))) ||
+         !(this.name === "Adeptus" && ["charge1","charge2","dash"].includes(this.adeptusState)) &&
+         !(this.name === "Yaksha" && (this.yakshaDashState !== "idle" || this.yakshaPlungeState !== "idle" || this.yakshaUltPhase === "charge"))) ||
         (this.name === "Adeptus" && this.isUltActive) ||
-        (this.name !== "Brawler" && this.name !== "Illustrade" && this.name !== "Retaliator" && this.name !== "Antimagic" && this.name !== "Adeptus")) {
+        (this.name !== "Brawler" && this.name !== "Illustrade" && this.name !== "Retaliator" && this.name !== "Antimagic" && this.name !== "Adeptus" &&
+         !(this.name === "Yaksha" && (this.yakshaDashState !== "idle" || this.yakshaPlungeState !== "idle" || this.yakshaUltPhase === "charge")))) {
       targetSpeed *= this.adeptusSlowTimer > 0 ? (this.adeptusSlowFactor || 1) : 1;
+      if (this.name === "Yaksha") {
+        const passiveSpeed = 1 + this.yakshaPassiveStacks * 0.04;
+        targetSpeed *= passiveSpeed * (this.isUltActive && this.yakshaUltPhase === "active" ? 1.5 : 1);
+      }
       if (currentSpeed > targetSpeed) {
         this.vx *= 0.92;
         this.vy *= 0.92;
@@ -4580,7 +4796,15 @@ class Ball {
       this.activateUlt();
     }
 
-    if (gameState === "playing" && !this.isClone && !this.isUltActive && this.name !== "Death Note" && this.name !== "Divergent" && this.name !== "Funeral" && (this.name !== "Bloodchain" || !this.bloodchainBankai)) {
+    // Yaksha uses an explicit activation gate, matching Funeral/Bloodchain's
+    // state-driven ultimate flow. This prevents generic auto-ult logic from
+    // racing the Yaksha transformation state.
+    if (gameState === "playing" && !this.isClone && this.name === "Yaksha" && !this.isUltActive) {
+      this.ultCharge = Math.min(this.ultMax, this.ultCharge + 1);
+      if (this.ultCharge >= this.ultMax) this.activateUlt();
+    }
+
+    if (gameState === "playing" && !this.isClone && !this.isUltActive && this.name !== "Death Note" && this.name !== "Divergent" && this.name !== "Funeral" && this.name !== "Yaksha" && (this.name !== "Bloodchain" || !this.bloodchainBankai)) {
       this.ultCharge = Math.min(this.ultMax, this.ultCharge + 1);
       if (this.ultCharge >= this.ultMax) this.activateUlt();
     }
@@ -4618,7 +4842,136 @@ class Ball {
       : this.bloodchainBaseDamage;
   }
 
+  startYakshaDash(target, dashIndex = 0) {
+    if (this.name !== "Yaksha" || !target || target.hp <= 0) return;
+    const angle = Math.atan2(target.y - this.y, target.x - this.x);
+    const dashDistance = 280; // deliberately longer than Funeral's 235px max CA travel
+
+    this.yakshaDashState = "dash";
+    this.yakshaDashIndex = dashIndex;
+    this.yakshaDashTimer = 16;
+    this.yakshaDashTarget = target;
+    this.yakshaDashHit = false;
+    this.yakshaDashHitTargets = new Set();
+    this.yakshaDashAngle = angle;
+    this.yakshaDashStartX = this.x;
+    this.yakshaDashStartY = this.y;
+    this.yakshaDashLastX = this.x;
+    this.yakshaDashLastY = this.y;
+    this.yakshaDashEndX = Math.max(this.radius, Math.min(canvas.width - this.radius, this.x + Math.cos(angle) * dashDistance));
+    this.yakshaDashEndY = Math.max(this.radius, Math.min(canvas.height - this.radius, this.y + Math.sin(angle) * dashDistance));
+    this.angle = angle;
+    this.vx = 0;
+    this.vy = 0;
+
+    effects.push({
+      type: "yaksha_dash",
+      x: this.x, y: this.y,
+      startX: this.x, startY: this.y,
+      endX: this.yakshaDashEndX, endY: this.yakshaDashEndY,
+      angle,
+      life: 26, maxLife: 26,
+    });
+  }
+
+  finishYakshaDashSequence() {
+    this.yakshaDashState = "idle";
+    this.yakshaDashTarget = null;
+    this.yakshaDashHit = false;
+    this.yakshaDashHitTargets = new Set();
+    this.yakshaDashTimer = 0;
+    this.yakshaDashPauseTimer = 0;
+    const ang = Math.random() * Math.PI * 2;
+    this.vx = Math.cos(ang) * this.baseSpeed;
+    this.vy = Math.sin(ang) * this.baseSpeed;
+  }
+
+  performYakshaPlunge() {
+    if (this.name !== "Yaksha" || !this.isUltActive || this.yakshaUltPhase !== "active" || this.hp <= 0) return;
+
+    const enemies = balls.filter((b) => b.team !== this.team && b.hp > 0);
+    if (enemies.length === 0) return;
+
+    const target = enemies.reduce((best, enemy) => {
+      const d = Math.hypot(enemy.x - this.x, enemy.y - this.y);
+      if (!best) return enemy;
+      return d < Math.hypot(best.x - this.x, best.y - this.y) ? enemy : best;
+    }, null);
+
+    this.yakshaPlungeState = "windup";
+    this.yakshaPlungeTimer = 36;
+    this.yakshaPlungeTarget = target;
+    this.yakshaPlungeX = target.x;
+    this.yakshaPlungeY = target.y;
+    this.vx = 0;
+    this.vy = 0;
+    this.angle = Math.atan2(target.y - this.y, target.x - this.x);
+    effects.push({ type: "yaksha_plunge_charge", x: this.x, y: this.y, target, life: 36, maxLife: 36 });
+  }
+
+  resolveYakshaPlunge() {
+    if (this.name !== "Yaksha" || !this.isUltActive || this.yakshaUltPhase !== "active") return;
+
+    const target = this.yakshaPlungeTarget && this.yakshaPlungeTarget.hp > 0
+      ? this.yakshaPlungeTarget
+      : balls.find((b) => b.team !== this.team && b.hp > 0);
+
+    const impactX = target ? target.x : this.yakshaPlungeX;
+    const impactY = target ? target.y : this.yakshaPlungeY;
+    const landingAngle = target ? Math.atan2(target.y - this.y, target.x - this.x) : this.angle;
+
+    this.x = Math.max(this.radius + 2, Math.min(canvas.width - this.radius - 2, impactX - Math.cos(landingAngle) * 30));
+    this.y = Math.max(this.radius + 2, Math.min(canvas.height - this.radius - 2, impactY - Math.sin(landingAngle) * 30));
+    this.angle = landingAngle;
+
+    const plungeDamage = this.damage * 2.5;
+    const impactRadius = 120;
+    let hitCount = 0;
+
+    balls.forEach((enemy) => {
+      if (enemy.team === this.team || enemy.hp <= 0) return;
+      const dist = Math.hypot(enemy.x - impactX, enemy.y - impactY);
+      if (dist <= impactRadius + enemy.radius) {
+        const dealt = enemy.takeDamage(plungeDamage, this);
+        enemy.iFrames = Math.max(enemy.iFrames, 14);
+        if (dealt > 0) hitCount++;
+
+        const dx = enemy.x - impactX;
+        const dy = enemy.y - impactY;
+        const d = Math.hypot(dx, dy) || 1;
+        enemy.vx = (dx / d) * 9;
+        enemy.vy = (dy / d) * 9;
+        enemy.knockbackTimer = 30;
+        spawnText("PLUNGE -" + dealt.toFixed(1), enemy.x, enemy.y - 18, "#427973");
+      }
+    });
+
+    if (hitCount > 0) {
+      const heal = this.maxHp * 0.15;
+      this.hp = Math.min(this.maxHp, this.hp + heal);
+      this.ultCharge = Math.min(this.ultMax, this.ultCharge + 50);
+      this.yakshaPassiveStacks = Math.min(5, this.yakshaPassiveStacks + 1);
+      this.yakshaPassiveTimer = 180;
+      spawnText("+" + heal.toFixed(1) + " HP", this.x, this.y - 30, "#4A5969");
+      spawnText("+50 ULT", this.x, this.y - 46, "#427973");
+      spawnText("YAKSHA +1", this.x, this.y - 62, "#73E6D2");
+    }
+
+    effects.push({
+      type: "yaksha_plunge_impact",
+      x: impactX, y: impactY,
+      life: 58, maxLife: 58,
+      radius: impactRadius,
+    });
+    this.yakshaPlungeCD = 240;
+    this.yakshaPlungeState = "idle";
+    this.yakshaPlungeTimer = 0;
+    this.yakshaPlungeTarget = null;
+  }
+
   activateUlt() {
+    if (this.name === "Yaksha" && (this.isUltActive || this.yakshaUltPhase === "charge" || this.yakshaUltPhase === "active")) return;
+
     if (this.name === "Killer Queen") {
       // Bites the Dust behaves like Vessel's Determination: once full,
       // the meter stays FULL until the trap actually triggers.
@@ -4698,7 +5051,6 @@ class Ball {
     } else if (this.name === "Juggernaut") {
       this.radius *= 1.4;
       this.wLen *= 1.4;
-      this.bonusText = "TITAN MODE!";
     } else if (this.name === "Brawler") {
       this.bonusText = "GRAVITY ORBIT!";
     } else if (this.name === "Retaliator") {
@@ -4753,13 +5105,28 @@ class Ball {
         this.funeralUltPhase = "eCharge";
         this.funeralUltTimer = 45;
       }
+    } else if (this.name === "Yaksha") {
+      // Bane of All Evil has a short transformation pause before the active burst begins.
+      this.yakshaUltTimer = 0;
+      this.yakshaUltChargeTimer = 60;
+      this.yakshaUltPhase = "charge";
+      this.yakshaPlungeCD = 0;
+      this.yakshaPlungeState = "idle";
+      this.yakshaPlungeTimer = 0;
+      this.yakshaPlungeTarget = null;
+      this.yakshaDashState = "idle";
+      this.yakshaDashTarget = null;
+      this.bonusText = "";
+      this.vx = 0;
+      this.vy = 0;
+      effects.push({ type: "yaksha_ult_start", x: this.x, y: this.y, life: 60, maxLife: 60 });
     } else if (this.name === "Adeptus") {
       this.adeptusUltTimer = 360;
       this.adeptusUltDamageMultiplier = 1.2;
       adeptusSkills.push(new AdeptusShower(this));
     }
 
-    if (this.name !== "Sword Saint" && this.name !== "Stasis" && this.name !== "Illustrade" && this.name !== "Infinity" && this.name !== "Echoes" && this.name !== "Funeral" && this.name !== "Kinich" && this.name !== "Adeptus") {
+    if (this.name !== "Sword Saint" && this.name !== "Stasis" && this.name !== "Illustrade" && this.name !== "Infinity" && this.name !== "Echoes" && this.name !== "Funeral" && this.name !== "Kinich" && this.name !== "Yaksha" && this.name !== "Adeptus") {
       let ultDuration = this.name === "Brawler" ? 1000 : this.name === "Antimagic" ? 2000 : 5000;
       setTimeout(() => {
         this.isUltActive = false;
@@ -5127,6 +5494,11 @@ function checkPhysicsAndHits() {
               A.rotSpeed *= -1;
               let finalDmg = B.takeDamage(A.damage, A);
               B.iFrames = 60;
+              if (A.name === "Yaksha" && finalDmg > 0) {
+                A.yakshaPassiveStacks = Math.min(5, A.yakshaPassiveStacks + 1);
+                A.yakshaPassiveTimer = 180;
+                spawnText("YAKSHA +1", A.x, A.y - 24, "#73E6D2");
+              }
               if ((A.name === "Funeral" || A.copycatFuneralActive) && finalDmg > 0) {
                 applyFuneralBloodBlossom(A, B);
                 applyFuneralBurn(A, B);
@@ -5191,6 +5563,11 @@ function checkPhysicsAndHits() {
               B.rotSpeed *= -1;
               let finalDmg = A.takeDamage(B.damage, B);
               A.iFrames = 60;
+              if (B.name === "Yaksha" && finalDmg > 0) {
+                B.yakshaPassiveStacks = Math.min(5, B.yakshaPassiveStacks + 1);
+                B.yakshaPassiveTimer = 180;
+                spawnText("YAKSHA +1", B.x, B.y - 24, "#73E6D2");
+              }
               if ((B.name === "Funeral" || B.copycatFuneralActive) && finalDmg > 0) {
                 applyFuneralBloodBlossom(B, A);
                 applyFuneralBurn(B, A);
@@ -5605,6 +5982,320 @@ function drawKinichAjaw(x, y, scale = 1, rotation = 0) {
   ctx.restore();
 }
 
+function drawYakshaAura(owner) {
+  const t = Date.now() * 0.001;
+  const r = owner.radius;
+  const ultCharge = owner.isUltActive && owner.yakshaUltPhase === "charge";
+  const ult = owner.isUltActive && owner.yakshaUltPhase === "active";
+  const dash = owner.yakshaDashState !== "idle" && !ult;
+  const plunge = owner.yakshaPlungeState !== "idle";
+
+  // Xiao-inspired, muted Anemo jade palette. Deliberately avoids neon/glow.
+  const jade = "#427973";
+  const jadeDark = "#35424C";
+  const slate = "#4A5969";
+  const jadeDeep = "#315B58";
+
+  ctx.save();
+  ctx.translate(Math.round(owner.x), Math.round(owner.y));
+  ctx.globalCompositeOperation = "source-over";
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  // A restrained, layered Anemo ring silhouette.
+  const ringR = r + (ult ? 18 : dash ? 14 : 10);
+  const ringAlpha = ult ? 0.92 : ultCharge ? 0.85 : dash ? 0.78 : 0.62;
+
+  ctx.strokeStyle = `rgba(66,121,115,${ringAlpha})`;
+  ctx.lineWidth = ult ? 4.6 : dash ? 4 : 3;
+  ctx.beginPath();
+  ctx.arc(0, 0, ringR, t * 0.8, t * 0.8 + Math.PI * 1.12);
+  ctx.stroke();
+
+  ctx.strokeStyle = `rgba(53,66,76,${Math.min(0.95, ringAlpha + 0.05)})`;
+  ctx.lineWidth = ult ? 3.4 : 2.6;
+  ctx.beginPath();
+  ctx.arc(0, 0, ringR - 6, -t * 0.95 + 1.5, -t * 0.95 + 1.5 + Math.PI * 1.02);
+  ctx.stroke();
+
+  ctx.strokeStyle = `rgba(74,89,105,${0.56 + (ult ? 0.18 : 0)})`;
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.arc(0, 0, ringR + 7, t * -0.58 + 0.3, t * -0.58 + 2.0);
+  ctx.stroke();
+
+  // Xiao-like horn arcs / Yaksha silhouette.
+  const hornY = -r * 0.72;
+  const hornSpread = r * 0.46;
+  ctx.strokeStyle = jadeDark;
+  ctx.lineWidth = ult ? 3.6 : 2.7;
+  ctx.beginPath();
+  ctx.arc(-hornSpread, hornY, r * 0.34, Math.PI * 0.92, Math.PI * 1.63);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(hornSpread, hornY, r * 0.34, -0.64, 0.08);
+  ctx.stroke();
+
+  // Six broad, rotating Anemo ribbons rather than glowing particles.
+  const ribbonCount = ult ? 8 : dash ? 6 : 5;
+  for (let i = 0; i < ribbonCount; i++) {
+    const a = t * (i % 2 ? -0.28 : 0.23) + i * Math.PI * 2 / ribbonCount;
+    const inner = r + (ult ? 5 : 2);
+    const outer = r + (ult ? 38 : dash ? 30 : 24);
+    const wobble = Math.sin(t * 2.2 + i) * 5;
+    ctx.strokeStyle = i % 3 === 0 ? jadeDark : (i % 2 ? jade : slate);
+    ctx.globalAlpha = ult ? 0.88 : 0.68;
+    ctx.lineWidth = i % 3 === 0 ? 3.8 : 2.4;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * inner, Math.sin(a) * inner);
+    ctx.quadraticCurveTo(
+      Math.cos(a + 0.22) * (inner + 10),
+      Math.sin(a + 0.22) * (inner + 10) + wobble,
+      Math.cos(a + 0.46) * outer,
+      Math.sin(a + 0.46) * outer + wobble
+    );
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // Small matte jade shards, not luminous diamonds.
+  const shardCount = ult ? 8 : dash ? 6 : 4;
+  for (let i = 0; i < shardCount; i++) {
+    const a = t * (i % 2 ? -0.35 : 0.27) + i * Math.PI * 2 / shardCount;
+    const rr = r + (ult ? 32 : dash ? 25 : 19) + Math.sin(t * 2 + i) * 2;
+    const px = Math.cos(a) * rr;
+    const py = Math.sin(a) * rr;
+    const size = ult ? 4.2 : 3.2;
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(a + Math.PI / 2);
+    ctx.fillStyle = i % 2 ? jade : slate;
+    ctx.beginPath();
+    ctx.moveTo(0, -size * 2.1);
+    ctx.lineTo(size, 0);
+    ctx.lineTo(0, size * 1.5);
+    ctx.lineTo(-size, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Transformation phase: dense Papilio-like circular framing, but matte jade/Anemo.
+  if (ultCharge) {
+    for (let ring = 0; ring < 3; ring++) {
+      const rr = r + 11 + ring * 11 + Math.sin(t * 3.6 + ring) * 1.5;
+      ctx.strokeStyle = ring === 1 ? slate : jade;
+      ctx.globalAlpha = 0.82 - ring * 0.1;
+      ctx.lineWidth = ring === 0 ? 5 : 2.6;
+      ctx.beginPath();
+      ctx.arc(0, 0, rr, -t * (1.1 + ring * 0.14), -t * (1.1 + ring * 0.14) + Math.PI * (1.05 + ring * 0.16));
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // Mask framing shards rising from the shoulders.
+    for (let i = 0; i < 10; i++) {
+      const a = i * Math.PI / 5 + t * 1.05;
+      const r1 = r + 8;
+      const r2 = r + 30 + Math.sin(t * 3 + i) * 4;
+      ctx.strokeStyle = i % 2 ? jade : jadeDark;
+      ctx.lineWidth = i % 2 ? 3 : 2;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * r1, Math.sin(a) * r1);
+      ctx.lineTo(Math.cos(a) * r2, Math.sin(a) * r2);
+      ctx.stroke();
+    }
+  }
+
+  if (dash) {
+    // Funeral-like forward crescent framing the dash direction.
+    const dir = owner.angle;
+    ctx.strokeStyle = jade;
+    ctx.lineWidth = 5.2;
+    ctx.beginPath();
+    ctx.arc(0, 0, r + 15, dir - 0.92, dir + 0.92);
+    ctx.stroke();
+    ctx.strokeStyle = slate;
+    ctx.lineWidth = 2.8;
+    ctx.beginPath();
+    ctx.arc(0, 0, r + 22, dir - 0.58, dir + 0.58);
+    ctx.stroke();
+  }
+
+  if (plunge) {
+    ctx.strokeStyle = jade;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(0, 0, r + 18, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawYakshaMask(owner) {
+  if (!owner || owner.name !== "Yaksha" || !owner.isUltActive) return;
+  const r = owner.radius;
+  const c = "#35424C";
+  const jade = "#427973";
+  const slate = "#4A5969";
+  ctx.save();
+  ctx.translate(owner.x, owner.y - 1);
+  ctx.globalAlpha = 0.94;
+
+  // Compact Yaksha mask silhouette suitable for the ball-based art style.
+  ctx.fillStyle = c;
+  ctx.beginPath();
+  ctx.moveTo(0, -r * 0.78);
+  ctx.lineTo(r * 0.46, -r * 0.26);
+  ctx.lineTo(r * 0.34, r * 0.56);
+  ctx.lineTo(0, r * 0.76);
+  ctx.lineTo(-r * 0.34, r * 0.56);
+  ctx.lineTo(-r * 0.46, -r * 0.26);
+  ctx.closePath();
+  ctx.fill();
+
+  // Horns.
+  ctx.strokeStyle = jade;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.28, -r * 0.5);
+  ctx.quadraticCurveTo(-r * 0.58, -r * 0.92, -r * 0.76, -r * 0.45);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(r * 0.28, -r * 0.5);
+  ctx.quadraticCurveTo(r * 0.58, -r * 0.92, r * 0.76, -r * 0.45);
+  ctx.stroke();
+
+  // Eye slits / mask accents.
+  ctx.strokeStyle = slate;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.34, -r * 0.1);
+  ctx.lineTo(-r * 0.08, -r * 0.02);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(r * 0.34, -r * 0.1);
+  ctx.lineTo(r * 0.08, -r * 0.02);
+  ctx.stroke();
+
+  // Small jade central mark.
+  ctx.fillStyle = jade;
+  ctx.beginPath();
+  ctx.moveTo(0, -r * 0.2);
+  ctx.lineTo(r * 0.08, r * 0.06);
+  ctx.lineTo(0, r * 0.2);
+  ctx.lineTo(-r * 0.08, r * 0.06);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawPrimordialJade(seg, owner) {
+  const dx = seg.p2.x - seg.p1.x, dy = seg.p2.y - seg.p1.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len, uy = dy / len;
+  const px = -uy, py = ux;
+  const scale = owner && owner.isUltActive ? 1.28 : 1;
+
+  const p1 = { x: seg.p1.x - ux * 3, y: seg.p1.y - uy * 3 };
+  const p2 = { x: seg.p2.x + ux * 8 * scale, y: seg.p2.y + uy * 8 * scale };
+  const gripEnd = { x: p2.x - ux * 28 * scale, y: p2.y - uy * 28 * scale };
+  const collar = { x: p2.x - ux * 28 * scale, y: p2.y - uy * 28 * scale };
+  const bladeBase = { x: p2.x - ux * 23 * scale, y: p2.y - uy * 23 * scale };
+  const bladeRoot = { x: p2.x - ux * 9 * scale, y: p2.y - uy * 9 * scale };
+  const tip = { x: p2.x + ux * 17 * scale, y: p2.y + uy * 17 * scale };
+
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.lineCap = 'round';
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+
+  // Dark jade handle with a muted central ridge.
+  ctx.strokeStyle = '#18352D';
+  ctx.lineWidth = 10;
+  ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(gripEnd.x, gripEnd.y); ctx.stroke();
+  ctx.strokeStyle = '#4E7A63';
+  ctx.lineWidth = 6.5;
+  ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(gripEnd.x, gripEnd.y); ctx.stroke();
+  ctx.strokeStyle = '#78945E';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(gripEnd.x, gripEnd.y); ctx.stroke();
+
+  // Short gold wrapping bands on the handle.
+  for (const d of [10, 20]) {
+    const c = { x: p1.x + ux * d, y: p1.y + uy * d };
+    ctx.strokeStyle = '#3F8E85';
+    ctx.lineWidth = 2.3;
+    ctx.beginPath();
+    ctx.moveTo(c.x - px * 5, c.y - py * 5);
+    ctx.lineTo(c.x + px * 5, c.y + py * 5);
+    ctx.stroke();
+  }
+
+  // Gold collar / guard.
+  ctx.strokeStyle = '#275C56';
+  ctx.lineWidth = 5.5;
+  ctx.beginPath();
+  ctx.moveTo(collar.x - px * 7 * scale, collar.y - py * 7 * scale);
+  ctx.lineTo(collar.x + px * 7 * scale, collar.y + py * 7 * scale);
+  ctx.stroke();
+  ctx.strokeStyle = '#5FB3A8';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(collar.x - px * 7 * scale, collar.y - py * 7 * scale);
+  ctx.lineTo(collar.x + px * 7 * scale, collar.y + py * 7 * scale);
+  ctx.stroke();
+
+  // Ornate jade spearhead: tapered core + two swept jade fins.
+  const fin = 13 * scale;
+  const rootHalf = 5 * scale;
+  const root = { x: bladeRoot.x, y: bladeRoot.y };
+  const base = { x: bladeBase.x, y: bladeBase.y };
+
+  ctx.fillStyle = owner && owner.isUltActive ? '#597B55' : '#4E7A63';
+  ctx.beginPath();
+  ctx.moveTo(tip.x, tip.y);
+  ctx.quadraticCurveTo(root.x + px * fin, root.y + py * fin, base.x + px * rootHalf, base.y + py * rootHalf);
+  ctx.quadraticCurveTo(base.x - ux * 2 * scale, base.y - uy * 2 * scale, root.x + ux * 3 * scale, root.y + uy * 3 * scale);
+  ctx.quadraticCurveTo(root.x - px * fin, root.y - py * fin, base.x - px * rootHalf, base.y - py * rootHalf);
+  ctx.quadraticCurveTo(root.x + ux * 3 * scale, root.y + uy * 3 * scale, tip.x, tip.y);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = '#254A3D';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Gold spine and central inset.
+  ctx.strokeStyle = '#6BC1B4';
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.moveTo(base.x + ux * 2 * scale, base.y + uy * 2 * scale);
+  ctx.lineTo(tip.x - ux * 5 * scale, tip.y - uy * 5 * scale);
+  ctx.stroke();
+
+  ctx.strokeStyle = '#A7C08A';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(root.x + px * 4 * scale, root.y + py * 4 * scale);
+  ctx.lineTo(tip.x - ux * 7 * scale + px * 2 * scale, tip.y - uy * 7 * scale + py * 2 * scale);
+  ctx.stroke();
+
+  // Small gold setting at the spear root.
+  ctx.fillStyle = '#5FB3A8';
+  ctx.beginPath();
+  ctx.moveTo(collar.x + ux * 5 * scale, collar.y + uy * 5 * scale);
+  ctx.lineTo(collar.x + ux * 9 * scale + px * 4 * scale, collar.y + uy * 9 * scale + py * 4 * scale);
+  ctx.lineTo(collar.x + ux * 13 * scale, collar.y + uy * 13 * scale);
+  ctx.lineTo(collar.x + ux * 9 * scale - px * 4 * scale, collar.y + uy * 9 * scale - py * 4 * scale);
+  ctx.closePath(); ctx.fill();
+
+  ctx.restore();
+}
+
 function drawKinichClaymore(seg,owner){
   const dx=seg.p2.x-seg.p1.x,dy=seg.p2.y-seg.p1.y,len=Math.hypot(dx,dy)||1;
   const ux=dx/len,uy=dy/len,px=-uy,py=ux;
@@ -5750,7 +6441,6 @@ function getCharSpecificStats(p) {
       let kqTarget = balls.find((b) => b.team !== p.team && b.hp > 0 && !b.isClone);
       lines.push(`Bomb Stacks: ${kqTarget ? kqTarget.kqBombStacks.length : 0}/3`);
       lines.push(`Sheer Heart Attack: ${p.kqSheerHeartAttackActive ? "ACTIVE" : p.kqSheerHeartAttackCD > 0 ? Math.ceil(p.kqSheerHeartAttackCD / 60) + "s" : "READY"}`);
-      lines.push(`Bites the Dust: ${p.kqBitesArmed ? "READY" : p.kqBitesBombActive ? "ACTIVE" : "Charging"}`);
       break;
     case "Copycat":
       lines.push(`Katana Dmg: ${p.damage.toFixed(1)}`);
@@ -5771,12 +6461,7 @@ function getCharSpecificStats(p) {
     case "Kinich":
       lines.push(`Claymore Dmg: ${p.damage.toFixed(1)}`);
       lines.push(`Skill: ${p.kinichSkillCD <= 0 ? "READY" : (p.kinichSkillCD / 60).toFixed(1) + "s"}`);
-      lines.push(`Mode: ${p.kinichAjawMode ? "AJAW FIELD" : "CLAYMORE"}`);
       lines.push(`Field: ${p.kinichField ? Math.ceil(p.kinichField.life / 60) + "s" : "-"}`);
-      if (p.isUltActive) {
-        const phaseLabel = p.kinichUltPhase === "windup" ? "AJAW DESCENDS" : p.kinichUltPhase === "barrage" ? `AJAW BARRAGE ${p.kinichUltShots}/20` : p.kinichUltPhase === "laserCharge" ? "LASER CHARGING" : "AJAW LASER";
-        lines.push(`Ult: ${phaseLabel}`);
-      }
       break;
     case "Divergent":
       lines.push(`Dmg: ${p.damage.toFixed(1)}`);
@@ -5831,8 +6516,7 @@ function getCharSpecificStats(p) {
       break;
     case "Tyrant":
       lines.push(`Sword Dmg: ${p.damage.toFixed(1)}`);
-      lines.push(`Atk Spd: ${p.atkSpeed.toFixed(2)}x`);
-      lines.push(`Portals: ${(p.tyrantPortalSlots ? p.tyrantPortalSlots.size : 0)}/36`);
+      lines.push(`Portals: ${(p.tyrantPortalSlots ? p.tyrantPortalSlots.size : 0)}`);
       break;
     case "Valkyrie":
       lines.push(`Sword Dmg: ${p.damage.toFixed(1)}`);
@@ -5844,16 +6528,25 @@ function getCharSpecificStats(p) {
       lines.push(`Paramita: ${p.hp < 25 ? "CRITICAL" : p.hp <= 50 ? "ACTIVE" : "NORMAL"}`);
       lines.push(`Charge Attack: ${p.funeralChargeAttackCD > 0 ? (p.funeralChargeAttackCD / 60).toFixed(1) + "s" : "READY"}`);
       break;
+    case "Yaksha":
+      lines.push(`Damage: ${p.damage.toFixed(1)}`);
+      lines.push(`Stacks: ${p.yakshaPassiveStacks}/5`);
+      if (!p.isUltActive) {
+        lines.push(`Skill: ${p.yakshaSkillCD <= 0 ? "READY" : (p.yakshaSkillCD / 60).toFixed(1) + "s"}`);
+      } else {
+        lines.push(`Plunge: ${p.yakshaPlungeCD <= 0 ? "READY" : (p.yakshaPlungeCD / 60).toFixed(1) + "s"}`);
+        lines.push(`Duration: ${Math.ceil(p.yakshaUltTimer / 60)}s`);
+      }
+      break;
     case "Adeptus":
       lines.push(`Bow Dmg: ${p.damage.toFixed(1)}`);
       lines.push(`Undivided Heart: ${p.adeptusHeartStacks}/3`);
       lines.push(`Ice Lotus: ${p.adeptusSkillCD <= 0 ? "READY" : (p.adeptusSkillCD / 60).toFixed(1) + "s"}`);
-      if (p.isUltActive) lines.push(`Ult: SHOWER ${Math.ceil(p.adeptusUltTimer / 60)}s`);
       break;
     default:
       lines.push(`Dmg: ${p.damage.toFixed(2)}`);
   }
-  if (p.bonusText && p.name !== "Death Note") {
+  if (p.bonusText && p.name !== "Death Note" && p.name !== "Yaksha") {
     const bonusColor = p.name === "Kinich" ? "#8BAE66" : "#00d2d3";
     lines.push(`<span style="color:${bonusColor}; font-weight:bold">${p.bonusText}</span>`);
   }
@@ -6805,6 +7498,291 @@ function gameLoop() {
       ctx.beginPath(); ctx.arc(ef.x, ef.y, 22 + t * 98, 0, Math.PI * 2); ctx.stroke();
       ctx.restore();
       ef.life--;
+    } else if (ef.type === "yaksha_ult_start") {
+      const t = 1 - ef.life / ef.maxLife;
+      const fade = Math.sin(Math.min(1, t) * Math.PI);
+      const jade = "#427973";
+      const dark = "#35424C";
+      const slate = "#4A5969";
+      ctx.save();
+      ctx.translate(ef.x, ef.y);
+      ctx.globalAlpha = 0.72 + fade * 0.28;
+
+      // Funeral-like transformation framing, but with Xiao's muted Anemo jade.
+      const base = 20 + t * 34;
+      ctx.strokeStyle = jade;
+      ctx.lineWidth = 7;
+      ctx.beginPath(); ctx.arc(0, 0, base, -Math.PI * 0.15, Math.PI * 1.15); ctx.stroke();
+      ctx.strokeStyle = slate;
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(0, 0, base + 15, Math.PI * 0.05, Math.PI * 1.7); ctx.stroke();
+      ctx.strokeStyle = dark;
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(0, 0, base + 30, -0.4, Math.PI * 0.9); ctx.stroke();
+
+      // Dense, opaque Anemo ribbons instead of luminous particles.
+      for (let i = 0; i < 12; i++) {
+        const a = i * Math.PI * 2 / 12 + t * 1.4;
+        const r1 = 27 + t * 8;
+        const r2 = 54 + t * 72;
+        ctx.strokeStyle = i % 3 === 0 ? dark : (i % 2 ? jade : slate);
+        ctx.lineWidth = i % 3 === 0 ? 4.5 : 2.5;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * r1, Math.sin(a) * r1);
+        ctx.quadraticCurveTo(
+          Math.cos(a + 0.18) * (r1 + 18),
+          Math.sin(a + 0.18) * (r1 + 18),
+          Math.cos(a + 0.10) * r2,
+          Math.sin(a + 0.10) * r2
+        );
+        ctx.stroke();
+      }
+
+      // Small central mask impression during the wind-up.
+      ctx.fillStyle = dark;
+      ctx.beginPath();
+      ctx.moveTo(0, -21 - t * 8);
+      ctx.lineTo(11 + t * 5, -5);
+      ctx.lineTo(6, 14 + t * 6);
+      ctx.lineTo(0, 20 + t * 8);
+      ctx.lineTo(-6, 14 + t * 6);
+      ctx.lineTo(-11 - t * 5, -5);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "yaksha_ult_transform") {
+      const t = 1 - ef.life / ef.maxLife;
+      const fade = Math.max(0, 1 - t);
+      const jade = "#427973";
+      const dark = "#35424C";
+      const slate = "#4A5969";
+      ctx.save();
+      ctx.globalAlpha = fade;
+
+      // Wide matte Anemo burst.
+      ctx.strokeStyle = jade;
+      ctx.lineWidth = 9;
+      ctx.beginPath(); ctx.arc(ef.x, ef.y, 18 + t * 112, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = slate;
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(ef.x, ef.y, 16 + t * 86, Math.PI * 0.12, Math.PI * 1.72); ctx.stroke();
+
+      for (let i = 0; i < 16; i++) {
+        const a = i * Math.PI / 8 + t * 1.4;
+        const r1 = 24 + t * 18;
+        const r2 = 62 + t * 122;
+        ctx.strokeStyle = i % 3 === 0 ? dark : (i % 2 ? jade : slate);
+        ctx.lineWidth = i % 3 === 0 ? 4 : 2.3;
+        ctx.beginPath();
+        ctx.moveTo(ef.x + Math.cos(a) * r1, ef.y + Math.sin(a) * r1);
+        ctx.quadraticCurveTo(
+          ef.x + Math.cos(a + 0.10) * (r1 + 22),
+          ef.y + Math.sin(a + 0.10) * (r1 + 22),
+          ef.x + Math.cos(a + 0.05) * r2,
+          ef.y + Math.sin(a + 0.05) * r2
+        );
+        ctx.stroke();
+      }
+      ctx.fillStyle = "rgba(53,66,76,0.16)";
+      ctx.beginPath(); ctx.arc(ef.x, ef.y, 26 + t * 74, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "yaksha_dash") {
+      const t = 1 - ef.life / ef.maxLife;
+      const px = ef.startX + (ef.endX - ef.startX) * Math.min(1, t * 1.05);
+      const py = ef.startY + (ef.endY - ef.startY) * Math.min(1, t * 1.05);
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(ef.angle);
+      const fade = Math.max(0, 1 - t);
+      const jade = "#427973";
+      const dark = "#35424C";
+      const slate = "#4A5969";
+      ctx.globalAlpha = fade;
+
+      // Funeral-style long linear dash trail, recolored to Xiao's muted Anemo jade.
+      ctx.strokeStyle = dark;
+      ctx.lineWidth = 15;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(-8, 0);
+      ctx.quadraticCurveTo(-52, -7, -115, Math.sin(t * 25) * 7);
+      ctx.stroke();
+
+      ctx.strokeStyle = jade;
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.moveTo(-6, 0);
+      ctx.quadraticCurveTo(-42, -5, -100, Math.sin(t * 25) * 5);
+      ctx.stroke();
+
+      ctx.strokeStyle = slate;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(-4, 0);
+      ctx.quadraticCurveTo(-34, -3, -88, Math.sin(t * 25) * 3);
+      ctx.stroke();
+
+      // Curved Anemo ribbons, kept matte and dark.
+      for (let b = 0; b < 6; b++) {
+        const rr = 18 + b * 11;
+        const yy = Math.sin(t * 15 + b * 1.7) * (5 + b * 0.7);
+        const side = b % 2 ? 1 : -1;
+        ctx.strokeStyle = b % 2 ? jade : dark;
+        ctx.lineWidth = b % 3 === 0 ? 3.2 : 2;
+        ctx.beginPath();
+        ctx.moveTo(-rr, yy + side * 3);
+        ctx.quadraticCurveTo(-rr - 8, yy - side * 9, -rr - 12, yy + side * 5);
+        ctx.stroke();
+      }
+
+      // Forward Anemo crescent, matching Funeral's strong tip cue.
+      ctx.strokeStyle = jade;
+      ctx.lineWidth = 5.5;
+      ctx.beginPath();
+      ctx.arc(12, 0, 27, -0.72, 0.72);
+      ctx.stroke();
+      ctx.strokeStyle = dark;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(12, 0, 34, -0.5, 0.5);
+      ctx.stroke();
+
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "yaksha_dash_hit") {
+      const t = 1 - ef.life / ef.maxLife;
+      const fade = Math.max(0, 1 - t);
+      const jade = "#427973";
+      const dark = "#35424C";
+      ctx.save();
+      ctx.translate(ef.x, ef.y);
+      ctx.rotate(ef.angle);
+      ctx.globalAlpha = fade;
+      ctx.strokeStyle = jade;
+      ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.arc(0, 0, 18 + t * 48, -0.82, 0.82); ctx.stroke();
+      ctx.strokeStyle = dark;
+      ctx.lineWidth = 2.6;
+      ctx.beginPath(); ctx.arc(0, 0, 25 + t * 58, -0.58, 0.58); ctx.stroke();
+      for (let i = 0; i < 5; i++) {
+        const a = i * Math.PI / 4 - 0.8;
+        ctx.lineWidth = i % 2 ? 2.5 : 3.2;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * 8, Math.sin(a) * 8);
+        ctx.lineTo(Math.cos(a) * (28 + t * 26), Math.sin(a) * (28 + t * 26));
+        ctx.stroke();
+      }
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "yaksha_plunge_charge") {
+      const t = 1 - ef.life / ef.maxLife;
+      const tx = ef.target && ef.target.hp > 0 ? ef.target.x : ef.x;
+      const ty = ef.target && ef.target.hp > 0 ? ef.target.y : ef.y;
+      const jade = "#427973";
+      const dark = "#35424C";
+      const slate = "#4A5969";
+      ctx.save();
+      ctx.globalAlpha = 0.55 + 0.45 * t;
+
+      ctx.strokeStyle = jade;
+      ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.arc(tx, ty, 32 + t * 92, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = dark;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(tx, ty, 24 + t * 62, -t * 1.4, -t * 1.4 + Math.PI * 1.5); ctx.stroke();
+
+      // Vertical Anemo streams.
+      for (let i = -2; i <= 2; i++) {
+        ctx.strokeStyle = i % 2 ? slate : jade;
+        ctx.lineWidth = i === 0 ? 6 : 3;
+        ctx.beginPath();
+        ctx.moveTo(tx + i * 16, ty - 118 - t * 48);
+        ctx.quadraticCurveTo(tx + i * 8, ty - 74 - t * 22, tx + i * 5, ty - 16);
+        ctx.stroke();
+      }
+
+      // Falling Yaksha silhouette / polearm cue.
+      ctx.fillStyle = dark;
+      ctx.beginPath();
+      ctx.moveTo(tx, ty - 108 - t * 36);
+      ctx.lineTo(tx + 12, ty - 68 - t * 20);
+      ctx.lineTo(tx + 6, ty - 22);
+      ctx.lineTo(tx, ty + 2);
+      ctx.lineTo(tx - 6, ty - 22);
+      ctx.lineTo(tx - 12, ty - 68 - t * 20);
+      ctx.closePath(); ctx.fill();
+
+      // Matte Anemo blades orbiting the landing point.
+      for (let i = 0; i < 8; i++) {
+        const a = t * 1.8 + i * Math.PI / 4;
+        const rr = 28 + t * 38;
+        ctx.save();
+        ctx.translate(tx + Math.cos(a) * rr, ty + Math.sin(a) * rr);
+        ctx.rotate(a + Math.PI / 2);
+        ctx.fillStyle = i % 2 ? slate : jade;
+        ctx.beginPath();
+        ctx.moveTo(0, -10); ctx.lineTo(5, 0); ctx.lineTo(0, 16); ctx.lineTo(-5, 0); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+      ctx.restore();
+      ef.life--;
+    } else if (ef.type === "yaksha_plunge_impact") {
+      const t = 1 - ef.life / ef.maxLife;
+      const fade = Math.max(0, 1 - t);
+      const radius = ef.radius || 120;
+      const jade = "#427973";
+      const dark = "#35424C";
+      const slate = "#4A5969";
+      ctx.save();
+      ctx.globalAlpha = fade;
+
+      // Broad, dark Anemo impact rings.
+      ctx.strokeStyle = jade;
+      ctx.lineWidth = 9;
+      ctx.beginPath(); ctx.arc(ef.x, ef.y, 20 + t * radius, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = slate;
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(ef.x, ef.y, 16 + t * (radius * 0.72), -0.1, Math.PI * 1.9); ctx.stroke();
+
+      // Dense but matte shockwave ribbons.
+      for (let i = 0; i < 14; i++) {
+        const a = i * Math.PI * 2 / 14 + t * 1.6;
+        const r1 = 20 + t * 28;
+        const r2 = 52 + t * 128;
+        ctx.strokeStyle = i % 2 ? jade : dark;
+        ctx.lineWidth = i % 3 === 0 ? 4.5 : 2.2;
+        ctx.beginPath();
+        ctx.moveTo(ef.x + Math.cos(a) * r1, ef.y + Math.sin(a) * r1);
+        ctx.quadraticCurveTo(
+          ef.x + Math.cos(a + 0.06) * (r1 + 20),
+          ef.y + Math.sin(a + 0.06) * (r1 + 20),
+          ef.x + Math.cos(a + 0.09) * r2,
+          ef.y + Math.sin(a + 0.09) * r2
+        );
+        ctx.stroke();
+      }
+
+      // Eight jade/slate spear-like shock blades.
+      const bladeAngles = [0, Math.PI / 2, Math.PI, Math.PI * 1.5, Math.PI / 4, Math.PI * 3 / 4, Math.PI * 5 / 4, Math.PI * 7 / 4];
+      for (let i = 0; i < bladeAngles.length; i++) {
+        const a = bladeAngles[i];
+        const len = 45 + t * 82;
+        const spread = 8 + t * 16;
+        ctx.save();
+        ctx.translate(ef.x + Math.cos(a) * (22 + t * 18), ef.y + Math.sin(a) * (22 + t * 18));
+        ctx.rotate(a);
+        ctx.fillStyle = i % 2 ? slate : jade;
+        ctx.beginPath();
+        ctx.moveTo(0, -spread * 0.45);
+        ctx.lineTo(len, 0);
+        ctx.lineTo(0, spread * 0.45);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+      ctx.restore();
+      ef.life--;
     } else if (ef.type === "kinich_skill_cast") {const t=1-ef.life/ef.maxLife;ctx.save();ctx.globalCompositeOperation="lighter";ctx.globalAlpha=1-t;ctx.strokeStyle="#5F8B62";ctx.shadowColor="#5F8B62";ctx.shadowBlur=0;ctx.lineWidth=3;ctx.setLineDash([5,5]);ctx.beginPath();ctx.arc(ef.x,ef.y,18+t*18,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);ctx.restore();ef.life--;
     } else if (ef.type === "kinich_charge_start") {const t=1-ef.life/ef.maxLife;ctx.save();ctx.globalCompositeOperation="lighter";ctx.translate(ef.x,ef.y);ctx.rotate(t*3);ctx.strokeStyle="#C49A4A";ctx.shadowColor="#C49A4A";ctx.shadowBlur=0;ctx.lineWidth=3;ctx.beginPath();ctx.arc(0,0,16+t*30,0,Math.PI*1.7);ctx.stroke();ctx.restore();ef.life--;
     } else if (ef.type === "kinich_charge_fire") {const t=1-ef.life/ef.maxLife;ctx.save();ctx.globalCompositeOperation="lighter";ctx.globalAlpha=1-t;ctx.strokeStyle="#C49A4A";ctx.shadowColor="#C49A4A";ctx.shadowBlur=0;ctx.lineWidth=5;ctx.strokeRect(ef.x-18,ef.y-18,36,36);ctx.strokeStyle="#8BAE66";ctx.lineWidth=2;ctx.strokeRect(ef.x-11,ef.y-11,22,22);ctx.restore();ef.life--;
@@ -6977,6 +7955,56 @@ function drawThumbnail(canvasEl, charName) {
     tCtx.lineWidth = 1.4;
     tCtx.beginPath(); tCtx.moveTo(18, -19); tCtx.lineTo(18, 19); tCtx.stroke();
     tCtx.beginPath(); tCtx.moveTo(-2, 0); tCtx.lineTo(29, 0); tCtx.stroke();
+
+    tCtx.restore();
+  } else if (charName === "Yaksha") {
+    const cx = w / 2, cy = h / 2;
+    tCtx.save();
+    tCtx.translate(cx, cy);
+    tCtx.imageSmoothingEnabled = false;
+
+    // Restrained jade aura; no neon bloom.
+    tCtx.strokeStyle = "rgba(78,122,99,.78)";
+    tCtx.lineWidth = 2;
+    tCtx.beginPath(); tCtx.arc(0, 0, w * 0.41, 0, Math.PI * 2); tCtx.stroke();
+    tCtx.strokeStyle = "rgba(63,142,133,.62)";
+    tCtx.lineWidth = 1;
+    tCtx.setLineDash([3, 3]);
+    tCtx.beginPath(); tCtx.arc(0, 0, w * 0.34, 0.25, Math.PI * 1.45); tCtx.stroke();
+    tCtx.setLineDash([]);
+
+    const ang = 0.42;
+    const ux = Math.cos(ang), uy = Math.sin(ang), px = -uy, py = ux;
+    const end = { x: w * 0.47, y: h * 0.47 * Math.sin(ang) / Math.max(0.01, Math.cos(ang)) };
+
+    // Compact jade/gold polearm silhouette matching the in-game renderer.
+    tCtx.rotate(ang);
+    tCtx.lineCap = "round";
+    tCtx.strokeStyle = "#18352D"; tCtx.lineWidth = 4.2;
+    tCtx.beginPath(); tCtx.moveTo(-3, 0); tCtx.lineTo(w * 0.31, 0); tCtx.stroke();
+    tCtx.strokeStyle = "#4E7A63"; tCtx.lineWidth = 2.8;
+    tCtx.beginPath(); tCtx.moveTo(-3, 0); tCtx.lineTo(w * 0.31, 0); tCtx.stroke();
+
+    for (const d of [8, 14]) {
+      tCtx.strokeStyle = "#3F8E85"; tCtx.lineWidth = 1;
+      tCtx.beginPath(); tCtx.moveTo(d - 1, -2.5); tCtx.lineTo(d + 1, 2.5); tCtx.stroke();
+    }
+
+    const bX = w * 0.29, tipX = w * 0.49;
+    tCtx.strokeStyle = "#2F6F67"; tCtx.lineWidth = 2.2;
+    tCtx.beginPath(); tCtx.moveTo(bX - 2, -5); tCtx.lineTo(bX - 2, 5); tCtx.stroke();
+
+    tCtx.fillStyle = "#4E7A63";
+    tCtx.beginPath();
+    tCtx.moveTo(tipX, 0);
+    tCtx.quadraticCurveTo(bX - 5, -5.5, bX - 11, -2.5);
+    tCtx.quadraticCurveTo(bX - 8, 0, bX - 11, 2.5);
+    tCtx.quadraticCurveTo(bX - 5, 5.5, tipX, 0);
+    tCtx.closePath(); tCtx.fill();
+    tCtx.strokeStyle = "#254A3D"; tCtx.lineWidth = 1; tCtx.stroke();
+
+    tCtx.strokeStyle = "#6BC1B4"; tCtx.lineWidth = 1;
+    tCtx.beginPath(); tCtx.moveTo(bX - 3, 0); tCtx.lineTo(tipX - 4, 0); tCtx.stroke();
 
     tCtx.restore();
   } else if (charName === "Kinich") { tCtx.save(); tCtx.globalCompositeOperation="source-over"; tCtx.strokeStyle="rgba(95,139,98,.78)"; tCtx.lineWidth=2; tCtx.beginPath(); tCtx.arc(w/2,h/2,w*.40,0,Math.PI*2); tCtx.stroke(); tCtx.translate(w/2,h/2); tCtx.rotate(.45); tCtx.imageSmoothingEnabled=false; tCtx.fillStyle="#203A34"; tCtx.fillRect(-14,-5,28,10); tCtx.fillStyle="#5F8B62"; tCtx.fillRect(-10,-3,22,6); tCtx.fillStyle="#C49A4A"; tCtx.fillRect(7,-2,4,4); tCtx.restore();
