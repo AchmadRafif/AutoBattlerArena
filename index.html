@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Auto-Battler Arena - Yaksha Update</title>
+    <link id="game-favicon" rel="icon" type="image/png" sizes="64x64" />
+    <link id="game-touch-icon" rel="apple-touch-icon" />
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Teko:wght@600;700&display=swap");
 
@@ -1257,7 +1259,52 @@
         }
       }
 
-    </style>
+    
+
+      /* Mobile-only simulation speed toggle */
+      .mobile-speed-toggle {
+        display: none;
+        border: 1px solid #4E7A63;
+        border-radius: 7px;
+        padding: 6px 8px;
+        background: #17231d;
+        color: #cbe4de;
+        font: 800 12px Arial, sans-serif;
+        white-space: nowrap;
+        cursor: pointer;
+        flex: 0 0 auto;
+        align-items: center;
+        justify-content: center;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      .mobile-speed-toggle.is-active {
+        background: #0E8388;
+        border-color: #CBE4DE;
+        color: #fff;
+        box-shadow: 0 0 10px rgba(14, 131, 136, 0.35);
+      }
+
+      @media (max-width: 768px) {
+        .mobile-speed-toggle {
+          display: inline-flex;
+          font-size: clamp(9px, 2.7vw, 12px);
+          padding: 7px 5px;
+        }
+
+        #game-container > div:first-child {
+          gap: 5px !important;
+          align-items: center !important;
+        }
+
+        #game-container > div:first-child span {
+          max-width: 32% !important;
+          min-width: 0 !important;
+          font-size: clamp(11px, 3.7vw, 18px) !important;
+        }
+      }
+
+</style>
   </head>
   <body>
     <!-- 1. SELECTION SCREEN -->
@@ -1382,6 +1429,14 @@
         "
       >
         <span id="name1">Player 1</span>
+        <button
+          id="mobile-speed-toggle"
+          class="mobile-speed-toggle"
+          type="button"
+          onclick="toggleMobileSpeed()"
+          aria-pressed="false"
+          title="Mempercepat simulasi game menjadi 2x"
+        >2× SPEED: OFF</button>
         <span id="name2">Player 2</span>
       </div>
 
