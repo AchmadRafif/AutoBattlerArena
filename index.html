@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Auto-Battler Arena - Yaksha Update</title>
+    <title>Auto-Battler Arena - Mode Update</title>
     <link id="game-favicon" rel="icon" type="image/png" sizes="64x64" />
     <link id="game-touch-icon" rel="apple-touch-icon" />
     <style>
@@ -1304,17 +1304,379 @@
         }
       }
 
+
+
+      /* ================= MODE SELECTION + MULTI-FIGHTER PICKER ================= */
+      #mode-screen {
+        position: fixed;
+        inset: 0;
+        z-index: 200;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        padding: 24px;
+        overflow-y: auto;
+        background: radial-gradient(circle at center, #1a1c23 0%, #08090c 100%);
+        color: #fff;
+        font-family: "Teko", sans-serif;
+      }
+      .mode-kicker {
+        color: #f1c40f;
+        font-size: 17px;
+        letter-spacing: 4px;
+        line-height: 1;
+      }
+      .mode-heading {
+        margin: 0;
+        text-align: center;
+        font-size: clamp(34px, 5vw, 54px);
+        line-height: .95;
+        letter-spacing: 3px;
+        text-shadow: 3px 3px 0 #000;
+      }
+      .mode-subheading {
+        margin: 0 0 14px;
+        color: #a0a5b5;
+        text-align: center;
+        font: 13px/1.5 Arial, sans-serif;
+      }
+      .mode-grid {
+        width: min(790px, 100%);
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .mode-card {
+        min-height: 124px;
+        padding: 17px 12px 14px;
+        color: #fff;
+        text-align: left;
+        font-family: "Teko", sans-serif;
+        background: rgba(18, 20, 26, .9);
+        border: 2px solid #2c303e;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: border-color .16s ease, background .16s ease, transform .16s ease;
+      }
+      .mode-card:hover,
+      .mode-card:focus-visible {
+        outline: none;
+        border-color: #f1c40f;
+        background: #222631;
+        transform: translateY(-2px);
+      }
+      .mode-card strong {
+        display: block;
+        color: #f1c40f;
+        font-size: 30px;
+        letter-spacing: 1px;
+        line-height: 1;
+      }
+      .mode-card span {
+        display: block;
+        margin-top: 9px;
+        color: #a0a5b5;
+        font: 12px/1.4 Arial, sans-serif;
+      }
+      .mode-back-btn {
+        margin-top: 8px;
+        padding: 5px 13px;
+        border: 1px solid #3a3f50;
+        border-radius: 6px;
+        background: transparent;
+        color: #9da4b5;
+        font: 700 12px Arial, sans-serif;
+        cursor: pointer;
+      }
+      .mode-back-btn:hover { color: #fff; border-color: #f1c40f; }
+      .fighter-slots {
+        display: none;
+        flex-direction: column;
+        gap: 6px;
+        margin-bottom: 9px;
+        flex: 0 0 auto;
+      }
+      .fighter-slot {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        min-width: 0;
+        min-height: 42px;
+        padding: 5px 8px;
+        border: 2px solid #2c303e;
+        border-radius: 7px;
+        background: #111319;
+        color: #9299aa;
+        font: 700 13px Arial, sans-serif;
+        text-align: left;
+        cursor: pointer;
+      }
+      .fighter-slot.is-active {
+        border-color: #f1c40f;
+        background: #25251d;
+        color: #fff;
+        box-shadow: 0 0 8px rgba(241, 196, 15, .18);
+      }
+      .fighter-slot.is-filled { color: #fff; }
+      .fighter-slot canvas {
+        width: 28px;
+        height: 28px;
+        flex: 0 0 28px;
+        border-radius: 50%;
+        background: #050508;
+        border: 1px solid #424756;
+      }
+      .fighter-slot span {
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      #selection-mode-label {
+        margin-bottom: 8px;
+        color: #f1c40f;
+        font-size: 16px;
+        letter-spacing: 2px;
+        text-align: center;
+      }
+      #selection-warning {
+        display: none;
+        max-width: 260px;
+        margin-top: 10px;
+        color: #ff8e83;
+        font: 12px/1.4 Arial, sans-serif;
+        text-align: center;
+      }
+      #fighter-name-strip { display: none; }
+      /* Nama multi-fighter harus sejajar dengan kedua ujung arena, bukan tepi layar. */
+      #game-container #battle-name-row.multi-fighter-header {
+        width: min(500px, calc(100vw - 24px)) !important;
+      }
+      /* Lebar dan posisi statistik sengaja dipertahankan seperti layout sebelumnya. */
+      #game-container #battle-stats-row.multi-fighter-stats {
+        width: min(1000px, calc(100vw - 24px)) !important;
+      }
+      /* Ultimate bar dibuat redup ketika petarung dan semua clone miliknya gugur. */
+      .ult-bar-shell {
+        transition: opacity 220ms ease, filter 220ms ease, background-color 220ms ease;
+      }
+      .ult-bar-shell.is-eliminated {
+        opacity: 0.38;
+        filter: grayscale(0.85) blur(0.35px);
+        background-color: #222 !important;
+      }
+      .ult-bar-shell.is-eliminated #barFill1,
+      .ult-bar-shell.is-eliminated #barFill2,
+      .ult-bar-shell.is-eliminated [id^="barFill"] {
+        opacity: 0.28;
+      }
+      .ult-bar-shell.is-eliminated [id^="ultName"] {
+        color: #b0b0b0 !important;
+      }
+      #battle-stats-row .fighter-stat-card { min-width: 0; }
+      #battle-stats-row .fighter-stat-card .character-stats {
+        font-size: 13px;
+        font-weight: bold;
+        margin-top: 8px;
+        line-height: 1.4;
+      }
+      #battle-stats-row.multi-fighter-stats {
+        display: flex !important;
+        align-items: flex-start;
+        justify-content: flex-start !important;
+        gap: 10px !important;
+        overflow-x: auto;
+        overflow-y: hidden;
+        overscroll-behavior-x: contain;
+        scrollbar-width: thin;
+        padding-bottom: 4px;
+      }
+      #battle-stats-row.multi-fighter-stats .fighter-stat-card {
+        flex: 0 0 calc((100% - var(--hud-gap-total, 50px)) / var(--hud-count, 6));
+        width: auto !important;
+        min-width: 0;
+      }
+      #battle-stats-row.multi-fighter-stats .character-stats {
+        font-size: 10px !important;
+        line-height: 1.3 !important;
+        overflow-wrap: anywhere;
+      }
+      #battle-name-row.multi-fighter-header {
+        position: relative;
+        display: block !important;
+        height: auto;
+        margin-bottom: 10px !important;
+      }
+      #battle-name-row.multi-fighter-header #name1,
+      #battle-name-row.multi-fighter-header #name2 { display: none !important; }
+      /* Nama petarung disusun dalam dua kolom vertikal seperti scoreboard tim. */
+      #battle-name-row.multi-fighter-header #fighter-name-strip {
+        display: grid;
+        width: 100%;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        align-items: start;
+        gap: 8px 24px;
+        text-align: initial;
+      }
+      .fighter-name-column {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1px;
+        min-width: 0;
+      }
+      .fighter-name-column[data-side="1"] { text-align: left; }
+      .fighter-name-column[data-side="2"] { text-align: right; }
+      .fighter-name-tag {
+        min-width: 0;
+        padding: 0 2px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        line-height: 1.08;
+        font: 800 clamp(16px, 2vw, 23px) Arial, sans-serif;
+        -webkit-text-stroke: 1px #111319;
+        paint-order: stroke fill;
+        text-shadow: 1px 2px 0 #111319, -1px 0 0 #111319, 1px 0 0 #111319;
+      }
+      .fighter-name-column[data-side="1"] .fighter-name-tag { text-align: left; }
+      .fighter-name-column[data-side="2"] .fighter-name-tag { text-align: right; }
+      #battle-name-row.multi-fighter-header #mobile-speed-toggle {
+        position: absolute;
+        z-index: 2;
+        left: 50%;
+        right: auto;
+        top: -25px;
+        transform: translateX(-50%);
+      }
+      @media (max-width: 768px) {
+        #mode-screen { padding: 20px 12px; gap: 10px; }
+        .mode-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+        .mode-card { min-height: 108px; padding: 13px 10px 11px; }
+        .mode-card strong { font-size: 26px; }
+        .mode-card span { font-size: 11px; }
+        .fighter-slot { min-height: 36px; padding: 4px; gap: 4px; font-size: 11px; }
+        .fighter-slot canvas { width: 24px; height: 24px; flex-basis: 24px; }
+        #battle-stats-row.multi-fighter-stats .fighter-stat-card {
+          flex: 0 0 clamp(118px, 31vw, 150px) !important;
+        }
+        #battle-stats-row.multi-fighter-stats .character-stats { font-size: 9px !important; }
+        #battle-name-row.multi-fighter-header #fighter-name-strip {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          gap: 6px 10px;
+          overflow: visible;
+          padding-bottom: 2px;
+        }
+        #battle-name-row.multi-fighter-header .fighter-name-tag {
+          font-size: clamp(12px, 3.8vw, 17px);
+          -webkit-text-stroke-width: .7px;
+        }
+      }
+      @media (max-width: 430px) {
+        .mode-kicker { font-size: 14px; }
+        .mode-subheading { max-width: 290px; font-size: 12px; }
+        .mode-card { min-height: 100px; }
+        .mode-card strong { font-size: 23px; }
+        .mode-card span { font-size: 10px; }
+        #battle-stats-row.multi-fighter-stats .fighter-stat-card { flex: 0 0 122px !important; }
+        #battle-name-row.multi-fighter-header .fighter-name-tag { font-size: 12px; }
+      }
+
+
+      /* ================= MOBILE HUD POLISH =================
+         Statistik multi-fighter tetap bisa swipe horizontal, tanpa scrollbar visual. */
+      @media (max-width: 768px) {
+        #battle-stats-row.multi-fighter-stats {
+          overflow-x: auto !important;
+          overflow-y: hidden !important;
+          scrollbar-width: none !important;
+          -ms-overflow-style: none !important;
+          -webkit-overflow-scrolling: touch;
+          touch-action: pan-x;
+          overscroll-behavior-x: contain;
+        }
+
+        #battle-stats-row.multi-fighter-stats::-webkit-scrollbar {
+          display: none !important;
+          width: 0 !important;
+          height: 0 !important;
+          background: transparent !important;
+        }
+
+        /* Keep the arena/name header aligned and prevent page-level sideways scroll. */
+        #game-container {
+          overflow-x: hidden !important;
+        }
+
+        #game-container #battle-name-row.multi-fighter-header,
+        #game-container #battle-stats-row.multi-fighter-stats {
+          max-width: calc(100vw - 16px) !important;
+        }
+      }
+
+      /* FINAL MOBILE HUD OVERRIDES: centered speed toggle + hidden stats scrollbar. */
+      @media (max-width: 768px) {
+        #game-container #battle-name-row.multi-fighter-header #mobile-speed-toggle {
+          left: 50% !important;
+          right: auto !important;
+          transform: translateX(-50%) !important;
+        }
+
+        #game-container #battle-stats-row.multi-fighter-stats {
+          overflow-x: auto !important;
+          overflow-y: hidden !important;
+          scrollbar-width: none !important;
+          -ms-overflow-style: none !important;
+          -webkit-overflow-scrolling: touch !important;
+          touch-action: pan-x !important;
+          overscroll-behavior-x: contain !important;
+        }
+
+        #game-container #battle-stats-row.multi-fighter-stats::-webkit-scrollbar,
+        #game-container #battle-stats-row.multi-fighter-stats::-webkit-scrollbar-track,
+        #game-container #battle-stats-row.multi-fighter-stats::-webkit-scrollbar-thumb,
+        #game-container #battle-stats-row.multi-fighter-stats::-webkit-scrollbar-corner {
+          display: none !important;
+          width: 0 !important;
+          height: 0 !important;
+          min-height: 0 !important;
+          background: transparent !important;
+          -webkit-appearance: none !important;
+        }
+      }
+
 </style>
   </head>
   <body>
+    <!-- 0. MODE SELECTION -->
+    <div id="mode-screen">
+      <div class="mode-kicker">AUTO-BATTLER ARENA</div>
+      <h1 class="mode-heading">SELECT GAME MODE</h1>
+      <p class="mode-subheading">Pilih format pertandingan sebelum menentukan karakter.</p>
+      <div class="mode-grid">
+        <button class="mode-card" type="button" onclick="chooseMode('1v1')"><strong>1V1</strong><span>Duel klasik. Satu karakter melawan satu karakter.</span></button>
+        <button class="mode-card" type="button" onclick="chooseMode('1v2')"><strong>1V2</strong><span>Satu karakter menghadapi dua karakter dalam satu tim.</span></button>
+        <button class="mode-card" type="button" onclick="chooseMode('2v1')"><strong>2V1</strong><span>Dua karakter bekerja sama melawan satu karakter.</span></button>
+        <button class="mode-card" type="button" onclick="chooseMode('2v2')"><strong>2V2</strong><span>Pertarungan dua tim, masing-masing dua karakter.</span></button>
+        <button class="mode-card" type="button" onclick="chooseMode('ffa4')"><strong>FREE FOR ALL 4</strong><span>Empat karakter. Setiap karakter bertarung sendiri.</span></button>
+        <button class="mode-card" type="button" onclick="chooseMode('ffa6')"><strong>FREE FOR ALL 6</strong><span>Enam karakter. Semua melawan semua.</span></button>
+      </div>
+    </div>
+
     <!-- 1. SELECTION SCREEN -->
-    <div id="selection-screen">
+    <div id="selection-screen" style="display: none;">
       <div class="select-panel" id="p1-panel">
-        <div class="panel-title">PLAYER 1 (KIRI)</div>
+        <div class="panel-title">TEAM A</div>
+        <div class="fighter-slots" id="p1-slots"></div>
         <div class="roster-grid" id="p1-roster"></div>
       </div>
 
       <div id="center-panel">
+        <div id="selection-mode-label">MODE • 1V1</div>
         <div class="matchup-container">
           <div class="preview-box" id="p1-preview-box">
             <canvas
@@ -1323,7 +1685,7 @@
               width="90"
               height="90"
             ></canvas>
-            <div class="preview-name" id="p1-preview-name">PLAYER 1</div>
+            <div class="preview-name" id="p1-preview-name">SELECT CHARACTER</div>
             <div class="preview-desc" id="p1-preview-desc">Pilih Karakter</div>
           </div>
 
@@ -1336,7 +1698,7 @@
               width="90"
               height="90"
             ></canvas>
-            <div class="preview-name" id="p2-preview-name">PLAYER 2</div>
+            <div class="preview-name" id="p2-preview-name">SELECT CHARACTER</div>
             <div class="preview-desc" id="p2-preview-desc">Pilih Karakter</div>
           </div>
         </div>
@@ -1349,10 +1711,13 @@
         >
           PILIH MAP
         </button>
+        <div id="selection-warning"></div>
+        <button class="mode-back-btn" type="button" onclick="backToModeSelect()">GANTI MODE</button>
       </div>
 
       <div class="select-panel" id="p2-panel">
-        <div class="panel-title">PLAYER 2 (KANAN)</div>
+        <div class="panel-title">TEAM B</div>
+        <div class="fighter-slots" id="p2-slots"></div>
         <div class="roster-grid" id="p2-roster"></div>
       </div>
     </div>
@@ -1419,6 +1784,7 @@
     <!-- 3. GAME CONTAINER (SATU-SATUNYA) -->
     <div id="game-container">
       <div
+        id="battle-name-row"
         style="
           display: flex;
           justify-content: space-between;
@@ -1428,7 +1794,7 @@
           font-size: 24px;
         "
       >
-        <span id="name1">Player 1</span>
+        <span id="name1">Character</span>
         <button
           id="mobile-speed-toggle"
           class="mobile-speed-toggle"
@@ -1437,7 +1803,8 @@
           aria-pressed="false"
           title="Mempercepat simulasi game menjadi 2x"
         >2× SPEED: OFF</button>
-        <span id="name2">Player 2</span>
+        <span id="name2">Character</span>
+        <div id="fighter-name-strip"></div>
       </div>
 
       <div id="canvas-wrapper">
@@ -1453,14 +1820,15 @@
         ></canvas>
         <div id="winner-overlay">
           <div id="winner-title">VICTORY!</div>
-          <div id="winner-subtitle">P1 WINS</div>
+          <div id="winner-subtitle">CHARACTER WINS</div>
           <button class="restart-btn" onclick="resetToMenu()">
-            PILIH KARAKTER LAGI
+            PILIH MODE LAGI
           </button>
         </div>
       </div>
 
       <div
+        id="battle-stats-row"
         style="
           display: flex;
           justify-content: space-between;

@@ -361,7 +361,98 @@ const mapDB = {
 
 let currentMap = "classic";
 
+const GAME_MODES = {
+  "1v1": { label: "1V1", sideA: 1, sideB: 1, freeForAll: false },
+  "1v2": { label: "1V2", sideA: 1, sideB: 2, freeForAll: false },
+  "2v1": { label: "2V1", sideA: 2, sideB: 1, freeForAll: false },
+  "2v2": { label: "2V2", sideA: 2, sideB: 2, freeForAll: false },
+  "ffa4": { label: "FREE FOR ALL 4", sideA: 2, sideB: 2, freeForAll: true, total: 4 },
+  "ffa6": { label: "FREE FOR ALL 6", sideA: 3, sideB: 3, freeForAll: true, total: 6 },
+};
+let currentMode = "1v1";
+let teamAChoices = ["Copycat"];
+let teamBChoices = ["Infinity"];
+let activeSlot = { 1: 0, 2: 0 };
+let matchFighters = [];
+
+function chooseMode(modeKey) {
+  const mode = GAME_MODES[modeKey];
+  if (!mode) return;
+  currentMode = modeKey;
+  teamAChoices = Array(mode.sideA).fill(null);
+  teamBChoices = Array(mode.sideB).fill(null);
+  if (modeKey === "1v1") {
+    teamAChoices[0] = "Copycat";
+    teamBChoices[0] = "Infinity";
+  }
+  activeSlot = { 1: 0, 2: 0 };
+  p1Choice = teamAChoices[0] || "Copycat";
+  p2Choice = teamBChoices[0] || "Infinity";
+  document.getElementById("mode-screen").style.display = "none";
+  document.getElementById("selection-screen").style.display = "";
+  document.getElementById("selection-mode-label").innerText = `MODE • ${mode.label}`;
+  document.getElementById("selection-warning").style.display = "none";
+  renderRosters();
+}
+
+function backToModeSelect() {
+  document.getElementById("selection-screen").style.display = "none";
+  document.getElementById("mode-screen").style.display = "flex";
+}
+
+function getChoicesForSide(side) {
+  return side === 1 ? teamAChoices : teamBChoices;
+}
+
+function getActiveChoice(side) {
+  const choices = getChoicesForSide(side);
+  return choices[activeSlot[side]] || null;
+}
+
+function getConfiguredFighters() {
+  const mode = GAME_MODES[currentMode] || GAME_MODES["1v1"];
+  const result = [];
+  teamAChoices.forEach((name, index) => {
+    result.push({ name, team: mode.freeForAll ? result.length + 1 : 1, side: 1, sideIndex: index });
+  });
+  teamBChoices.forEach((name, index) => {
+    result.push({ name, team: mode.freeForAll ? result.length + 1 : 2, side: 2, sideIndex: index });
+  });
+  return result;
+}
+
+function getLivingTeams(activeTeams) {
+  // Do not filter out clones: a surviving clone keeps its original team's match alive.
+  // Only temporary Adeptus lotuses are excluded from the combatant count.
+  return activeTeams.filter((teamId) =>
+    balls.some((b) => b.team === teamId && b.hp > 0 && !b.isAdeptusLotus)
+  );
+}
+
 function goToMapSelect() {
+  const warning = document.getElementById("selection-warning");
+  const allChoices = teamAChoices.concat(teamBChoices);
+  const availableNames = Object.keys(characterDB).filter((name) => !allChoices.includes(name));
+
+  // Slot yang belum dipilih diisi otomatis dengan karakter acak.
+  // Kandidat diambil dari daftar yang belum terpakai agar hasil auto-fill tidak duplikat.
+  const fillRandomEmptySlots = (choices) => {
+    choices.forEach((name, index) => {
+      if (name) return;
+      if (availableNames.length === 0) return;
+      const randomIndex = Math.floor(Math.random() * availableNames.length);
+      choices[index] = availableNames.splice(randomIndex, 1)[0];
+    });
+  };
+
+  fillRandomEmptySlots(teamAChoices);
+  fillRandomEmptySlots(teamBChoices);
+
+  // Re-render slot cards/previews so the generated picks are visible if the user goes back.
+  p1Choice = teamAChoices[0] || "Copycat";
+  p2Choice = teamBChoices[0] || "Infinity";
+  if (warning) warning.style.display = "none";
+  renderRosters();
   document.getElementById("selection-screen").style.display = "none";
   document.getElementById("map-screen").style.display = "flex";
   renderMapRoster();
@@ -379,6 +470,7 @@ function backToCharSelect() {
   document.querySelectorAll("#p1-roster, #p2-roster").forEach((roster) => {
     roster.scrollTop = 0;
   });
+  renderRosters();
 }
 
 function renderMapRoster() {
@@ -435,21 +527,13 @@ function applyMapUITheme() {
   let m = mapDB[currentMap] || mapDB["classic"];
   const gameContainer = document.getElementById("game-container");
   const gameCanvas = document.getElementById("gameCanvas");
-
   if (gameContainer) gameContainer.style.backgroundColor = m.containerBg;
   if (gameCanvas) gameCanvas.style.borderColor = m.borderColor;
 
-  const stats1 = document.getElementById("stats1");
-  const stats2 = document.getElementById("stats2");
-
-  if (stats1) {
-    stats1.style.color = m.textColor;
-    stats1.style.textShadow = m.textShadow;
-  }
-  if (stats2) {
-    stats2.style.color = m.textColor;
-    stats2.style.textShadow = m.textShadow;
-  }
+  document.querySelectorAll(".character-stats").forEach((stats) => {
+    stats.style.color = m.textColor;
+    stats.style.textShadow = m.textShadow;
+  });
 }
 
 let balls = [];
@@ -4092,6 +4176,7 @@ class Ball {
                 spawnText("[VALKYRIE] VALHALLA REGEN (+35 HP)!", this.x, this.y - 30, "#FF76CE");
               } else if (ultType === 6) {
                 let clone = new Ball(this.team, "Copycat", this.x + 30, this.y, true);
+                clone.cloneOwner = this;
                 // This specific Copycat clone comes from Monkey King's copied ultimate.
                 // It keeps Copycat passive, but disappears after 5 seconds (300 frames).
                 clone.copycatCloneLife = 2000;
@@ -5063,6 +5148,7 @@ class Ball {
       this.bonusText = "CLONES OUT!";
       for (let i = 0; i < 2; i++) {
         let clone = new Ball(this.team, this.name, this.x + (i === 0 ? 35 : -35), this.y, true);
+        clone.cloneOwner = this;
         clone.staffData = this.staffData;
         let ang = Math.random() * Math.PI * 2;
         clone.vx = Math.cos(ang) * clone.baseSpeed;
@@ -6557,24 +6643,34 @@ function getCharSpecificStats(p) {
 }
 
 function updateUI() {
-  let p1 = balls.find((b) => b.team === 1 && !b.isClone && !b.isAdeptusLotus),
-    p2 = balls.find((b) => b.team === 2 && !b.isClone && !b.isAdeptusLotus);
-  if (p1) {
-    const p1Pct = p1.name === "Funeral"
-      ? (1 - p1.funeralUltCooldown / Math.max(1, p1.funeralUltCooldownMax || p1.funeralUltMax)) * 100
-      : (p1.ultCharge / p1.ultMax) * 100;
-    document.getElementById("barFill1").style.width = Math.max(0, Math.min(100, p1Pct)) + "%";
-    document.getElementById("ultName1").innerText = p1.name === "Funeral" ? (p1.hp < 25 ? "SPIRIT SOOTHER" : "PARAMITA PAPILIO") : characterDB[p1.name].ultName;
-    document.getElementById("stats1").innerHTML = getCharSpecificStats(p1);
-  }
-  if (p2) {
-    const p2Pct = p2.name === "Funeral"
-      ? (1 - p2.funeralUltCooldown / Math.max(1, p2.funeralUltCooldownMax || p2.funeralUltMax)) * 100
-      : (p2.ultCharge / p2.ultMax) * 100;
-    document.getElementById("barFill2").style.width = Math.max(0, Math.min(100, p2Pct)) + "%";
-    document.getElementById("ultName2").innerText = p2.name === "Funeral" ? (p2.hp < 25 ? "SPIRIT SOOTHER" : "PARAMITA PAPILIO") : characterDB[p2.name].ultName;
-    document.getElementById("stats2").innerHTML = getCharSpecificStats(p2);
-  }
+  matchFighters.forEach((fighter, index) => {
+    const p = fighter.ball;
+    if (!p) return;
+    const suffix = index + 1;
+    const pct = p.name === "Funeral"
+      ? (1 - p.funeralUltCooldown / Math.max(1, p.funeralUltCooldownMax || p.funeralUltMax)) * 100
+      : (p.ultCharge / p.ultMax) * 100;
+    const fill = document.getElementById("barFill" + suffix);
+    const ultName = document.getElementById("ultName" + suffix);
+    const stats = document.getElementById("stats" + suffix);
+    const ultBarShell = document.getElementById("ultBarShell" + suffix);
+    if (fill) fill.style.width = Math.max(0, Math.min(100, pct)) + "%";
+
+    // Redupkan bar ultimate hanya jika tubuh asli gugur dan seluruh clone
+    // yang berasal dari petarung itu juga sudah hilang. Clone yang masih hidup
+    // membuat bar tetap aktif agar status karakter tidak tampak tereliminasi.
+    const hasLivingOwnedClone = balls.some((candidate) =>
+      candidate.isClone && candidate.cloneOwner === p && candidate.hp > 0
+    );
+    const isEliminated = p.hp <= 0 && !hasLivingOwnedClone;
+    if (ultBarShell) ultBarShell.classList.toggle("is-eliminated", isEliminated);
+    if (ultName) {
+      ultName.innerText = p.name === "Funeral"
+        ? (p.hp < 25 ? "SPIRIT SOOTHER" : "PARAMITA PAPILIO")
+        : characterDB[p.name].ultName;
+    }
+    if (stats) stats.innerHTML = getCharSpecificStats(p);
+  });
 }
 
 function toggleMobileSpeed() {
@@ -7870,12 +7966,22 @@ function gameLoop() {
 
     updateUI();
     if (gameState === "playing") {
-      let team1Alive = balls.some((b) => b.team === 1 && !b.isAdeptusLotus);
-      let team2Alive = balls.some((b) => b.team === 2 && !b.isAdeptusLotus);
-      if (!team1Alive || !team2Alive) {
+      // A team remains alive while any fighter OR any living clone belonging to it remains.
+      // Adeptus lotuses are temporary skill objects, not independent fighters.
+      const mode = GAME_MODES[currentMode] || GAME_MODES["1v1"];
+      const activeTeams = [...new Set(matchFighters.map((fighter) => fighter.team))];
+      const livingTeams = getLivingTeams(activeTeams);
+
+      // Both team battles and FFA end only once one or zero combatant teams remain.
+      const shouldEnd = livingTeams.length <= 1;
+      if (shouldEnd) {
         gameState = "over";
-        let winner = team1Alive ? p1Choice : p2Choice;
-        showWinnerOverlay(winner);
+        const winningTeam = livingTeams.length === 1 ? livingTeams[0] : null;
+        const winners = winningTeam === null
+          ? []
+          : matchFighters.filter((fighter) => fighter.team === winningTeam).map((fighter) => fighter.name);
+        const uniqueWinners = [...new Set(winners)];
+        showWinnerOverlay(uniqueWinners.length ? uniqueWinners.join(" + ") : "DRAW");
       }
     }
   }
@@ -7883,7 +7989,10 @@ function gameLoop() {
 }
 
 function showWinnerOverlay(winnerName) {
-  document.getElementById("winner-subtitle").innerText = winnerName.toUpperCase() + " WINS!";
+  const subtitle = document.getElementById("winner-subtitle");
+  subtitle.innerText = winnerName === "DRAW"
+    ? "DRAW!"
+    : winnerName.toUpperCase() + (winnerName.includes(" + ") ? " WIN!" : " WINS!");
   document.getElementById("winner-overlay").style.display = "flex";
 }
 
@@ -7891,10 +8000,11 @@ function resetToMenu() {
   document.getElementById("winner-overlay").style.display = "none";
   document.getElementById("game-container").style.display = "none";
   document.getElementById("map-screen").style.display = "none";
-
-  // Let responsive CSS choose the correct selection layout.
-  const selectionScreen = document.getElementById("selection-screen");
-  selectionScreen.style.display = "";
+  document.getElementById("selection-screen").style.display = "none";
+  document.getElementById("mode-screen").style.display = "flex";
+  document.getElementById("mobile-speed-toggle").textContent = "2× SPEED: OFF";
+  document.getElementById("mobile-speed-toggle").classList.remove("is-active");
+  mobileSpeedMultiplier = 1;
   document.querySelectorAll("#p1-roster, #p2-roster").forEach((roster) => {
     roster.scrollTop = 0;
   });
@@ -8068,32 +8178,89 @@ function drawThumbnail(canvasEl, charName) {
 function renderRosters() {
   const p1Roster = document.getElementById("p1-roster");
   const p2Roster = document.getElementById("p2-roster");
+  const mode = GAME_MODES[currentMode] || GAME_MODES["1v1"];
+  const isClassicDuel = currentMode === "1v1";
+  const titleA = document.querySelector("#p1-panel .panel-title");
+  const titleB = document.querySelector("#p2-panel .panel-title");
+  titleA.innerText = mode.freeForAll ? `FIGHTERS 1–${mode.sideA}` : `TEAM A${mode.sideA > 1 ? ` • ${mode.sideA} FIGHTERS` : ""}`;
+  titleB.innerText = mode.freeForAll ? `FIGHTERS ${mode.sideA + 1}–${mode.total}` : `TEAM B${mode.sideB > 1 ? ` • ${mode.sideB} FIGHTERS` : ""}`;
+  document.getElementById("p1-slots").style.display = isClassicDuel ? "none" : "flex";
+  document.getElementById("p2-slots").style.display = isClassicDuel ? "none" : "flex";
+
   p1Roster.innerHTML = "";
   p2Roster.innerHTML = "";
-
   Object.keys(characterDB).forEach((charName) => {
-    let card1 = document.createElement("div");
-    card1.className = `char-card ${p1Choice === charName ? "selected-p1" : ""}`;
+    const card1 = document.createElement("div");
+    const selected1 = getActiveChoice(1) === charName;
+    card1.className = `char-card ${selected1 ? "selected-p1" : ""}`;
     card1.innerHTML = `<canvas class="card-canvas" width="38" height="38"></canvas><div class="card-name">${charName}</div>`;
     card1.onclick = () => selectCharacter(1, charName);
     p1Roster.appendChild(card1);
     drawThumbnail(card1.querySelector("canvas"), charName);
 
-    let card2 = document.createElement("div");
-    card2.className = `char-card ${p2Choice === charName ? "selected-p2" : ""}`;
+    const card2 = document.createElement("div");
+    const selected2 = getActiveChoice(2) === charName;
+    card2.className = `char-card ${selected2 ? "selected-p2" : ""}`;
     card2.innerHTML = `<canvas class="card-canvas" width="38" height="38"></canvas><div class="card-name">${charName}</div>`;
     card2.onclick = () => selectCharacter(2, charName);
     p2Roster.appendChild(card2);
     drawThumbnail(card2.querySelector("canvas"), charName);
   });
 
-  updatePreviewCard(1, p1Choice);
-  updatePreviewCard(2, p2Choice);
+  renderFighterSlots(1);
+  renderFighterSlots(2);
+  p1Choice = teamAChoices[0] || "Copycat";
+  p2Choice = teamBChoices[0] || "Infinity";
+  updatePreviewCard(1, getActiveChoice(1));
+  updatePreviewCard(2, getActiveChoice(2));
+  const label = document.getElementById("selection-mode-label");
+  if (label) label.innerText = `MODE • ${mode.label}`;
+  const warning = document.getElementById("selection-warning");
+  if (warning && teamAChoices.concat(teamBChoices).every(Boolean)) warning.style.display = "none";
 }
 
-function selectCharacter(playerNum, charName) {
-  if (playerNum === 1) p1Choice = charName;
-  else p2Choice = charName;
+function renderFighterSlots(side) {
+  const container = document.getElementById(side === 1 ? "p1-slots" : "p2-slots");
+  const choices = getChoicesForSide(side);
+  container.innerHTML = "";
+  choices.forEach((name, index) => {
+    const slot = document.createElement("button");
+    slot.type = "button";
+    slot.className = `fighter-slot ${activeSlot[side] === index ? "is-active" : ""} ${name ? "is-filled" : ""}`;
+    slot.setAttribute("aria-label", `${side === 1 ? "Team A" : "Team B"}, slot ${index + 1}${name ? ": " + name : ": pilih karakter"}`);
+    const thumb = document.createElement("canvas");
+    thumb.width = 38;
+    thumb.height = 38;
+    const text = document.createElement("span");
+    text.innerText = name || `SLOT ${index + 1} • PILIH KARAKTER`;
+    slot.appendChild(thumb);
+    slot.appendChild(text);
+    slot.onclick = () => {
+      activeSlot[side] = index;
+      renderRosters();
+    };
+    container.appendChild(slot);
+    if (name) drawThumbnail(thumb, name);
+    else {
+      const tctx = thumb.getContext("2d");
+      tctx.clearRect(0, 0, thumb.width, thumb.height);
+      tctx.strokeStyle = "#53596b";
+      tctx.lineWidth = 2;
+      tctx.beginPath();
+      tctx.arc(19, 19, 13, 0, Math.PI * 2);
+      tctx.stroke();
+      tctx.strokeStyle = "#8b91a1";
+      tctx.beginPath(); tctx.moveTo(12, 19); tctx.lineTo(26, 19); tctx.moveTo(19, 12); tctx.lineTo(19, 26); tctx.stroke();
+    }
+  });
+}
+
+function selectCharacter(side, charName) {
+  const choices = getChoicesForSide(side);
+  if (activeSlot[side] < 0 || activeSlot[side] >= choices.length) return;
+  choices[activeSlot[side]] = charName;
+  if (side === 1) p1Choice = teamAChoices[0] || charName;
+  else p2Choice = teamBChoices[0] || charName;
   renderRosters();
 }
 
@@ -8102,36 +8269,104 @@ function updatePreviewCard(playerNum, charName) {
   const nameEl = document.getElementById(`p${playerNum}-preview-name`);
   const descEl = document.getElementById(`p${playerNum}-preview-desc`);
 
+  if (!charName || !characterDB[charName]) {
+    nameEl.innerText = "SELECT CHARACTER";
+    nameEl.style.color = "#a0a5b5";
+    descEl.innerText = `Pilih slot ${activeSlot[playerNum] + 1}, lalu karakter di daftar.`;
+    const tctx = canvasEl.getContext("2d");
+    tctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+    tctx.strokeStyle = "#53596b";
+    tctx.lineWidth = 3;
+    tctx.beginPath();
+    tctx.arc(canvasEl.width / 2, canvasEl.height / 2, canvasEl.width * .35, 0, Math.PI * 2);
+    tctx.stroke();
+    return;
+  }
   nameEl.innerText = charName.toUpperCase();
   nameEl.style.color = characterDB[charName].color;
   descEl.innerText = characterDB[charName].desc;
   drawThumbnail(canvasEl, charName);
 }
 
+function renderBattleHUD(fighters) {
+  const header = document.getElementById("battle-name-row");
+  const name1 = document.getElementById("name1");
+  const name2 = document.getElementById("name2");
+  const nameStrip = document.getElementById("fighter-name-strip");
+  const statsRow = document.getElementById("battle-stats-row");
+  const multi = fighters.length > 2;
+
+  header.classList.toggle("multi-fighter-header", multi);
+  statsRow.classList.toggle("multi-fighter-stats", multi);
+  header.style.setProperty("--hud-count", String(fighters.length));
+  statsRow.style.setProperty("--hud-count", String(fighters.length));
+  statsRow.style.setProperty("--hud-gap-total", `${Math.max(0, fighters.length - 1) * 10}px`);
+  header.style.width = multi ? "min(1000px, calc(100vw - 24px))" : "min(500px, calc(100vw - 24px))";
+  statsRow.style.width = multi ? "min(1000px, calc(100vw - 24px))" : "min(500px, calc(100vw - 24px))";
+  nameStrip.innerHTML = "";
+
+  if (multi) {
+    name1.style.display = "none";
+    name2.style.display = "none";
+
+    // Group names by side into left/right columns. In FFA, side 1 and side 2
+    // are only display columns; every fighter still keeps its own unique team.
+    const leftColumn = document.createElement("div");
+    leftColumn.className = "fighter-name-column";
+    leftColumn.dataset.side = "1";
+    const rightColumn = document.createElement("div");
+    rightColumn.className = "fighter-name-column";
+    rightColumn.dataset.side = "2";
+
+    fighters.forEach((fighter) => {
+      const tag = document.createElement("div");
+      tag.className = "fighter-name-tag";
+      tag.innerText = fighter.name;
+      tag.style.color = characterDB[fighter.name].color;
+      tag.dataset.side = String(fighter.side);
+      (fighter.side === 2 ? rightColumn : leftColumn).appendChild(tag);
+    });
+    nameStrip.appendChild(leftColumn);
+    nameStrip.appendChild(rightColumn);
+  } else {
+    name1.style.display = "";
+    name2.style.display = "";
+    name1.innerText = fighters[0] ? fighters[0].name : "";
+    name2.innerText = fighters[1] ? fighters[1].name : "";
+    name1.style.color = fighters[0] ? characterDB[fighters[0].name].color : "#fff";
+    name2.style.color = fighters[1] ? characterDB[fighters[1].name].color : "#fff";
+  }
+
+  statsRow.innerHTML = "";
+  fighters.forEach((fighter, index) => {
+    const card = document.createElement("div");
+    card.className = "fighter-stat-card";
+    card.style.flex = multi ? "0 0 calc((100% - var(--hud-gap-total)) / var(--hud-count))" : "1 1 0";
+    card.innerHTML = `
+      <div id="ultBarShell${index + 1}" class="ult-bar-shell" style="background:#333;color:#fff;text-align:center;font-weight:bold;padding:5px;border:2px solid #000;font-size:13px;position:relative;overflow:hidden;">
+        <div id="barFill${index + 1}" style="position:absolute;left:0;top:0;height:100%;width:0%;background:${characterDB[fighter.name].ultColor};z-index:1;"></div>
+        <span id="ultName${index + 1}" style="position:relative;z-index:2">${characterDB[fighter.name].ultName}</span>
+      </div>
+      <div id="stats${index + 1}" class="character-stats"></div>
+    `;
+    statsRow.appendChild(card);
+  });
+}
+
 function confirmStartGame() {
   document.getElementById("selection-screen").style.display = "none";
   document.getElementById("map-screen").style.display = "none";
+  document.getElementById("mode-screen").style.display = "none";
   document.getElementById("game-container").style.display = "flex";
-  
-  applyMapUITheme();
   setupGame();
+  applyMapUITheme();
 }
 
 function setupGame() {
-  ["1", "2"].forEach((id) => {
-    let choice = id === "1" ? p1Choice : p2Choice;
-    let nameEl = document.getElementById("name" + id);
-    
-    nameEl.innerText = choice;
-    nameEl.style.color = characterDB[choice].color;
-    nameEl.style.textShadow = "none";
-
-    document.getElementById("barFill" + id).style.backgroundColor = characterDB[choice].ultColor;
-    document.getElementById("ultName" + id).innerText = characterDB[choice].ultName;
-  });
-
   balls = [];
+  matchFighters = [];
   projectiles = [];
+  effects = [];
   kinichSkills = [];
   adeptusSkills = [];
   bloodchainSkills = [];
@@ -8141,8 +8376,41 @@ function setupGame() {
   tyrantPortals = [];
   tyrantSwords = [];
   killerQueenSkills = [];
-  balls.push(new Ball(1, p1Choice, canvas.width * 0.25, canvas.height / 2));
-  balls.push(new Ball(2, p2Choice, canvas.width * 0.75, canvas.height / 2));
+  mobileSpeedMultiplier = 1;
+  const speedButton = document.getElementById("mobile-speed-toggle");
+  speedButton.textContent = "2× SPEED: OFF";
+  speedButton.classList.remove("is-active");
+  speedButton.setAttribute("aria-pressed", "false");
+
+  const roster = getConfiguredFighters();
+  const mode = GAME_MODES[currentMode] || GAME_MODES["1v1"];
+  const total = roster.length;
+  roster.forEach((fighter, index) => {
+    let x, y;
+    if (mode.freeForAll) {
+      const angle = -Math.PI / 2 + index * (Math.PI * 2 / total);
+      const radius = total >= 6 ? 175 : 160;
+      x = canvas.width / 2 + Math.cos(angle) * radius;
+      y = canvas.height / 2 + Math.sin(angle) * radius;
+    } else {
+      const countOnSide = fighter.side === 1 ? mode.sideA : mode.sideB;
+      const xRatio = fighter.side === 1 ? 0.25 : 0.75;
+      x = canvas.width * xRatio;
+      y = countOnSide === 1
+        ? canvas.height / 2
+        : canvas.height * (0.32 + fighter.sideIndex * (0.36 / (countOnSide - 1)));
+    }
+    const ball = new Ball(fighter.team, fighter.name, x, y);
+    ball.vx = 0;
+    ball.vy = 0;
+    balls.push(ball);
+    matchFighters.push({ ...fighter, ball });
+  });
+
+  p1Choice = teamAChoices[0] || "Copycat";
+  p2Choice = teamBChoices[0] || "Infinity";
+  renderBattleHUD(matchFighters);
+  updateUI();
 
   gameState = "countdown";
   // Keep exactly one animation loop alive across restarts.
@@ -8152,6 +8420,7 @@ function setupGame() {
   }
 
   setTimeout(() => {
+    if (gameState !== "countdown") return;
     gameState = "playing";
     balls.forEach((b) => {
       let ang = Math.random() * Math.PI * 2;
@@ -8178,4 +8447,6 @@ function applyYakshaFavicon() {
 window.onload = () => {
   renderRosters();
   applyYakshaFavicon();
+  document.getElementById("mode-screen").style.display = "flex";
+  document.getElementById("selection-screen").style.display = "none";
 };
